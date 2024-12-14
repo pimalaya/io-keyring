@@ -2,7 +2,7 @@
 #![cfg(feature = "apple-native")]
 #![cfg(feature = "std")]
 
-use keyring::{apple::std::progress, event::KeyringEvent, state::KeyringEntry};
+use keyring::{apple::std::progress, event::KeyringEvent, state::EntryState};
 use secrecy::ExposeSecret;
 
 fn main() {

@@ -11,8 +11,8 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            features: secret-service-blocking,std
-            example: secret-service-blocking-std
+            features: ss-std,std
+            example: ss-std-std
           - os: macos-13
             features: apple-native,std
             example: apple-std

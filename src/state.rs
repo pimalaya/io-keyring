@@ -7,14 +7,14 @@ pub enum KeyringState {
     DeleteSecret,
 }
 
-#[derive(Debug, Clone)]
-pub struct KeyringEntry {
+#[derive(Clone, Debug, Default)]
+pub struct EntryState {
     pub service: String,
     pub account: String,
     pub state: Option<KeyringState>,
 }
 
-impl KeyringEntry {
+impl EntryState {
     pub fn new(service: impl ToString, account: impl ToString) -> Self {
         Self {
             service: service.to_string(),
@@ -36,7 +36,7 @@ impl KeyringEntry {
     }
 }
 
-impl Iterator for KeyringEntry {
+impl Iterator for EntryState {
     type Item = KeyringState;
 
     fn next(&mut self) -> Option<Self::Item> {

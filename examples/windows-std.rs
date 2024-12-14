@@ -2,7 +2,7 @@
 #![cfg(feature = "windows-native")]
 #![cfg(feature = "std")]
 
-use keyring::{event::KeyringEvent, state::KeyringEntry, windows::std::progress};
+use keyring::{event::KeyringEvent, state::EntryState, windows::std::progress};
 use secrecy::ExposeSecret;
 
 fn main() {

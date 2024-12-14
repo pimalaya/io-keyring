@@ -19,7 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 name = "keyring"
 
 [features]
-default = ["secret-service-blocking", "std"]
+default = ["ss-dbus-std", "ss-openssl-std"]
 
 # MacOS/iOS Keychain
 #
@@ -31,32 +31,25 @@ windows-native = ["dep:byteorder", "dep:windows-sys"]
 
 # Secret service, based on D-Bus
 #
-secret-service-blocking = ["dep:dbus"]
-secret-service-nonblock = ["dep:dbus", "dbus/futures"]
-
-# I/O connectors
-#
-std = []
-
-# Serde de/serialization
-#
-# serde = ["dep:serde"]
+ss-dbus-std = ["dep:dbus"]
+ss-openssl-std = ["dep:openssl", "dep:once_cell", "dep:rand", "dep:num"]
 
 # Vendored
 #
-# vendored = ["dbus/vendored"]
+vendored = ["dbus?/vendored", "openssl?/vendored"]
 
 [build-dependencies]
 dbus-codegen = { version = "0.12", default-features = false }
 
 [dependencies]
-secrecy = { version = "0.10" }
-# serde = { version = "1", features = ["derive"], optional = true }
-thiserror = { version = "2" }
-tracing = { version = "0.1" }
-
-[target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", optional = true }
+num = { version = "0.4", optional = true }
+once_cell = { version = "1", optional = true }
+openssl = { version = "0.10.68", optional = true }
+rand = { version = "0.8", optional = true }
+secrecy = "0.10"
+thiserror = "2"
+tracing = "0.1"
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 security-framework = { version = "3", default-features = false, optional = true }

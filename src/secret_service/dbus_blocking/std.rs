@@ -1,25 +1,16 @@
-use std::{collections::HashMap, fmt, time::Duration};
+use std::{collections::HashMap, fmt};
 
 use dbus::{
     arg::{PropMap, RefArg, Variant},
     blocking::{Connection, Proxy},
     Path,
 };
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::{ExposeSecret, SecretSlice};
 use thiserror::Error;
-
-use crate::{
-    event::KeyringEvent,
-    state::{EntryState, KeyringState},
-};
 
 use super::{
     api::{OrgFreedesktopSecretCollection, OrgFreedesktopSecretItem, OrgFreedesktopSecretService},
-    config::{DBUS_DEST, DBUS_PATH, ITEM_ATTRIBUTES, ITEM_LABEL, TIMEOUT},
-    crypto::{Algorithm, ALGORITHM_PLAIN},
-    encryption::EncryptionAlgorithm,
-    flow::{CryptoIo, Io},
-    state::{SecretServiceEntryState, SecretServiceEntryStateKind},
+    DBUS_DEST, DBUS_PATH, ITEM_ATTRIBUTES, ITEM_LABEL, TIMEOUT,
 };
 
 #[derive(Debug, Error)]
@@ -46,37 +37,40 @@ pub enum Error {
     GetSecretError(#[source] dbus::Error),
     #[error("cannot delete item from Secret Service using D-Bus")]
     DeleteItemError(#[source] dbus::Error),
+    #[error("cannot cast server public key to bytes using OpenSSL")]
+    CastServerPublicKeyToBytesError,
+    #[error("cannot derive shared key using OpenSSL")]
+    DeriveSharedKeyError(#[source] openssl::error::ErrorStack),
+    #[error("cannot encrypt secret using OpenSSL")]
+    EncryptSecretError(#[source] openssl::error::ErrorStack),
+    #[error("cannot encrypt empty secret using OpenSSL")]
+    EncryptSecretEmptyError,
+    #[error("cannot decrypt secret using OpenSSL")]
+    DecryptSecretError(#[source] openssl::error::ErrorStack),
+    #[error("cannot decrypt empty secret using OpenSSL")]
+    DecryptSecretEmptyError,
+    #[error("cannot write empty secret into Secret Service entry using D-Bus")]
+    WriteEmptySecretError,
 }
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
-pub struct SecretService {
+pub struct SecretServiceStd {
     connection: Connection,
-    session_path: Path<'static>,
 }
 
-impl fmt::Debug for SecretService {
+impl fmt::Debug for SecretServiceStd {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SecretService")
-            .field("session_path", &self.session_path)
-            .finish_non_exhaustive()
+        f.debug_struct("SecretServiceStd")
+            .field("connection", &self.connection.unique_name())
+            .finish()
     }
 }
 
-impl SecretService {
-    pub fn connect(algorithm: EncryptionAlgorithm) -> Result<Self> {
+impl SecretServiceStd {
+    pub fn connect() -> Result<Self> {
         let connection = Connection::new_session().map_err(Error::CreateSessionError)?;
-        let proxy = connection.with_proxy(DBUS_DEST, DBUS_PATH, TIMEOUT);
-
-        let bytes_arg = Box::new(String::new()) as Box<dyn RefArg>;
-        let (_, session_path) = proxy
-            .open_session(algorithm.as_ref(), Variant(bytes_arg))
-            .map_err(Error::OpenSessionError)?;
-
-        Ok(Self {
-            connection,
-            session_path,
-        })
+        Ok(Self { connection })
     }
 
     pub fn get_default_collection(&self) -> Result<Collection<'_>> {
@@ -126,20 +120,20 @@ impl SecretService {
     }
 }
 
-#[derive(Debug)]
-pub struct Session {
-    path: Path<'static>,
-    algorithm: EncryptionAlgorithm,
-}
+// #[derive(Debug)]
+// pub struct Session {
+//     path: Path<'static>,
+//     algorithm: Algorithm,
+// }
 
 #[derive(Debug)]
 pub struct Collection<'a> {
-    service: &'a SecretService,
+    service: &'a SecretServiceStd,
     path: Path<'a>,
 }
 
 impl<'a> Collection<'a> {
-    pub fn new(service: &'a SecretService, path: Path<'a>) -> Self {
+    pub fn new(service: &'a SecretServiceStd, path: Path<'a>) -> Self {
         Self { service, path }
     }
 
@@ -185,9 +179,11 @@ impl<'a> Collection<'a> {
         &self,
         service: impl ToString,
         account: impl ToString,
-        secret: impl Into<SecretString>,
+        secret: impl Into<SecretSlice<u8>>,
+        salt: Vec<u8>,
+        session_path: Path<'static>,
     ) -> Result<Item<'_>> {
-        let secret = secret.into().expose_secret().as_bytes().to_vec();
+        let secret = secret.into().expose_secret().to_vec();
         let label = Box::new(service.to_string() + ":" + &account.to_string());
         let attrs: Box<HashMap<String, String>> = Box::new(HashMap::from_iter([
             (String::from("service"), service.to_string()),
@@ -198,8 +194,7 @@ impl<'a> Collection<'a> {
         props.insert(ITEM_LABEL.into(), Variant(label));
         props.insert(ITEM_ATTRIBUTES.into(), Variant(attrs));
 
-        let session_path = self.service.session_path.clone();
-        let secret = (session_path, vec![], secret, "text/plain");
+        let secret = (session_path, salt, secret, "text/plain");
         let (item_path, _prompt_path) = self
             .proxy()
             .create_item(props, secret, true)
@@ -215,18 +210,6 @@ impl<'a> Collection<'a> {
         Ok(Item::new(&self.service, item_path))
     }
 
-    pub fn get_secret(
-        &self,
-        service: impl AsRef<str>,
-        account: impl AsRef<str>,
-    ) -> Result<SecretString> {
-        let item = self.get_item(service, account)?;
-        let (_path, _salt, secret, _mime) = item.get_secret()?;
-        let secret = String::from_utf8(secret).unwrap();
-
-        Ok(secret.into())
-    }
-
     pub fn delete_item(&self, service: impl AsRef<str>, account: impl AsRef<str>) -> Result<()> {
         self.get_item(service, account)?.delete()?;
         Ok(())
@@ -235,12 +218,12 @@ impl<'a> Collection<'a> {
 
 #[derive(Debug)]
 pub struct Item<'a> {
-    service: &'a SecretService,
-    path: Path<'a>,
+    service: &'a SecretServiceStd,
+    pub path: Path<'a>,
 }
 
 impl<'a> Item<'a> {
-    pub fn new(service: &'a SecretService, path: Path<'a>) -> Self {
+    pub fn new(service: &'a SecretServiceStd, path: Path<'a>) -> Self {
         Self { service, path }
     }
 
@@ -250,9 +233,11 @@ impl<'a> Item<'a> {
             .with_proxy(DBUS_DEST, &self.path, TIMEOUT)
     }
 
-    pub fn get_secret(&self) -> Result<(Path<'static>, Vec<u8>, Vec<u8>, String)> {
+    pub fn get_secret(
+        &self,
+        session_path: Path<'static>,
+    ) -> Result<(Path<'static>, Vec<u8>, Vec<u8>, String)> {
         let proxy = &self.proxy();
-        let session_path = self.service.session_path.clone();
         OrgFreedesktopSecretItem::get_secret(proxy, session_path).map_err(Error::GetSecretError)
     }
 
@@ -262,105 +247,50 @@ impl<'a> Item<'a> {
     }
 }
 
-pub struct IoProcessor<'a> {
+pub struct SecretServiceDbusStdProcessor {
     service: String,
     account: String,
-    ss: SecretService,
-    item: Option<Item<'a>>,
+    dbus: SecretServiceStd,
+    pub secret: Option<(SecretSlice<u8>, Vec<u8>)>,
 }
 
-impl IoProcessor<'_> {
+impl SecretServiceDbusStdProcessor {
     pub fn try_new(service: impl ToString, account: impl ToString) -> Result<Self> {
         Ok(Self {
             service: service.to_string(),
             account: account.to_string(),
-            crypto: CryptoIoProcessor::try_new()?,
-            ss: SecretService::connect()?,
-            item: None,
+            dbus: SecretServiceStd::connect()?,
+            secret: None,
         })
     }
 
-    pub fn process(&mut self, io: Io) -> Result<()> {
-        match io {
-            Io::Read => {
-                self.secret = self
-                    .ss
-                    .get_default_collection()?
-                    .get_item(self.service.clone(), self.account.clone())?;
-            }
-            Io::Write => {
-                self.ss.get_default_collection()?.create_item(
-                    self.service.clone(),
-                    self.account.clone(),
-                    secret,
-                )?;
-            }
-            Io::Delete => {
-                self.ss
-                    .get_default_collection()?
-                    .delete_item(self.service.clone(), self.account.clone())?;
-            }
-            Io::Crypto(io) => self.crypto.process(io)?,
-        }
+    pub fn connection(&self) -> &Connection {
+        &self.dbus.connection
+    }
+
+    pub fn save(&mut self, session_path: Path<'static>) -> Result<()> {
+        let Some((secret, salt)) = self.secret.take() else {
+            return Err(Error::WriteEmptySecretError);
+        };
+
+        self.dbus.get_default_collection()?.create_item(
+            self.service.clone(),
+            self.account.clone(),
+            secret,
+            salt,
+            session_path,
+        )?;
 
         Ok(())
     }
-}
 
-pub struct CryptoIoProcessor<'a> {
-    path: Path<'static>,
-    algorithm: Algorithm,
-    shared_key: Option<[u8; 16]>,
-}
+    pub fn read(&mut self, session_path: Path<'static>) -> Result<(SecretSlice<u8>, Vec<u8>)> {
+        let (_, salt, secret, _) = self
+            .dbus
+            .get_default_collection()?
+            .get_item(self.service.clone(), self.account.clone())?
+            .get_secret(session_path)?;
 
-impl CryptoIoProcessor {
-    pub fn try_new(proxy: Proxy<'_, &'_ Connection>, algorithm: Algorithm) -> Result<Self> {
-        match algorithm {
-            Algorithm::Plain => {
-                let bytes_arg = Box::new(String::new()) as Box<dyn RefArg>;
-                let (_, path) = proxy.open_session(ALGORITHM_PLAIN, Variant(bytes_arg))?;
-
-                Ok(Self {
-                    path,
-                    algorithm,
-                    shared_key: None,
-                })
-            }
-            Algorithm::DhIetf1024Sha256Aes128CbcPkcs7 => {
-                // crypto: create private and public key
-                let keypair = crypto::Keypair::generate();
-
-                // send our public key with algorithm to service
-                let public_bytes = keypair.public.to_bytes_be();
-                let bytes_arg = Variant(Box::new(public_bytes) as Box<dyn RefArg>);
-                let (out, path) = p.open_session(ALGORITHM_DH, bytes_arg)?;
-
-                // get service public key back and create shared key from it
-                if let Some(server_public_key_bytes) = cast::<Vec<u8>>(&out.0) {
-                    let shared_key = keypair.derive_shared(server_public_key_bytes);
-                    Ok(Session {
-                        path,
-                        encryption,
-                        #[cfg(any(feature = "crypto-rust", feature = "crypto-openssl"))]
-                        shared_key: Some(shared_key),
-                    })
-                } else {
-                    Err(Error::Parse)
-                }
-            }
-        }
-    }
-
-    pub fn process(&mut self, io: CryptoIo) -> Result<()> {
-        match io {
-            CryptoIo::Encrypt => {
-                todo!()
-            }
-            CryptoIo::Decrypt => {
-                todo!()
-            }
-        }
-
-        Ok(())
+        Ok((secret.into(), salt))
     }
 }
