@@ -1,0 +1,66 @@
+[package]
+name = "keyring-lib"
+description = "Cross-platform, sans I/O library to manage credentials"
+version = "2.0.0"
+authors = ["soywod <clement.douin@posteo.net>"]
+edition = "2021"
+license = "MIT"
+categories = ["asynchronous"]
+keywords = ["password", "credential", "keychain", "keyring", "secret"]
+homepage = "https://pimalaya.org/"
+documentation = "https://docs.rs/keyring-lib/latest/keyring/"
+repository = "https://github.com/pimalaya/keyring/"
+
+[package.metadata.docs.rs]
+features = []
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+name = "keyring"
+
+[features]
+default = ["secret-service-blocking", "std"]
+
+# MacOS/iOS Keychain
+#
+apple-native = ["dep:security-framework"]
+
+# Windows Credential Manager
+#
+windows-native = ["dep:byteorder", "dep:windows-sys"]
+
+# Secret service, based on D-Bus
+#
+secret-service-blocking = ["dep:dbus"]
+secret-service-nonblock = ["dep:dbus", "dbus/futures"]
+
+# I/O connectors
+#
+std = []
+
+# Serde de/serialization
+#
+# serde = ["dep:serde"]
+
+# Vendored
+#
+# vendored = ["dbus/vendored"]
+
+[build-dependencies]
+dbus-codegen = { version = "0.12", default-features = false }
+
+[dependencies]
+secrecy = { version = "0.10" }
+# serde = { version = "1", features = ["derive"], optional = true }
+thiserror = { version = "2" }
+tracing = { version = "0.1" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = { version = "0.9", optional = true }
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+security-framework = { version = "3", default-features = false, optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+byteorder = { version = "1.2", optional = true }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials"], optional = true }
