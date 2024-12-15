@@ -1,5 +1,6 @@
 #![cfg(target_os = "linux")]
 #![cfg(feature = "ss-dbus-std")]
+#![cfg(feature = "ss-dbus-std")]
 
 use keyring::{
     secret_service::dbus_blocking::{

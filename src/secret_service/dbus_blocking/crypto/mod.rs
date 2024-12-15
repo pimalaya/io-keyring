@@ -1,7 +1,7 @@
 pub mod algorithm;
 mod flow;
 mod io;
-#[cfg(feature = "ss-openssl-std")]
+#[cfg(feature = "ss-dbus-openssl-std")]
 pub mod openssl;
 
 pub use self::{flow::Flow, io::Io};

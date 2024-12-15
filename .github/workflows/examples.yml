@@ -11,14 +11,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            features: ss-std,std
-            example: ss-std-std
+            features: ss-dbus-std,ss-dbus-openssl-std
+            example: ss-dbus-openssl-std
           - os: macos-13
-            features: apple-native,std
-            example: apple-std
-          - os: windows-latest
-            features: windows-native,std
-            example: windows-std
+            features: apple-native-std
+            example: apple-native-std
     steps:
       - uses: actions/checkout@v4
       - uses: awalsh128/cache-apt-pkgs-action@latest
