@@ -5,14 +5,14 @@ pub const ALGORITHM_DH: &str = "dh-ietf1024-sha256-aes128-cbc-pkcs7";
 pub enum Algorithm {
     #[default]
     Plain,
-    DhIetf1024Sha256Aes128CbcPkcs7,
+    Dh,
 }
 
 impl AsRef<str> for Algorithm {
     fn as_ref(&self) -> &str {
         match self {
             Self::Plain => ALGORITHM_PLAIN,
-            Self::DhIetf1024Sha256Aes128CbcPkcs7 => ALGORITHM_DH,
+            Self::Dh => ALGORITHM_DH,
         }
     }
 }

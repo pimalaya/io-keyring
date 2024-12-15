@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use super::{
     api::{OrgFreedesktopSecretCollection, OrgFreedesktopSecretItem, OrgFreedesktopSecretService},
-    DBUS_DEST, DBUS_PATH, ITEM_ATTRIBUTES, ITEM_LABEL, TIMEOUT,
+    Flow, DBUS_DEST, DBUS_PATH, ITEM_ATTRIBUTES, ITEM_LABEL, TIMEOUT,
 };
 
 #[derive(Debug, Error)]
@@ -55,11 +55,11 @@ pub enum Error {
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
-pub struct SecretServiceStd {
+pub struct SecretService {
     connection: Connection,
 }
 
-impl fmt::Debug for SecretServiceStd {
+impl fmt::Debug for SecretService {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SecretServiceStd")
             .field("connection", &self.connection.unique_name())
@@ -67,7 +67,7 @@ impl fmt::Debug for SecretServiceStd {
     }
 }
 
-impl SecretServiceStd {
+impl SecretService {
     pub fn connect() -> Result<Self> {
         let connection = Connection::new_session().map_err(Error::CreateSessionError)?;
         Ok(Self { connection })
@@ -128,12 +128,12 @@ impl SecretServiceStd {
 
 #[derive(Debug)]
 pub struct Collection<'a> {
-    service: &'a SecretServiceStd,
+    service: &'a SecretService,
     path: Path<'a>,
 }
 
 impl<'a> Collection<'a> {
-    pub fn new(service: &'a SecretServiceStd, path: Path<'a>) -> Self {
+    pub fn new(service: &'a SecretService, path: Path<'a>) -> Self {
         Self { service, path }
     }
 
@@ -218,12 +218,12 @@ impl<'a> Collection<'a> {
 
 #[derive(Debug)]
 pub struct Item<'a> {
-    service: &'a SecretServiceStd,
+    service: &'a SecretService,
     pub path: Path<'a>,
 }
 
 impl<'a> Item<'a> {
-    pub fn new(service: &'a SecretServiceStd, path: Path<'a>) -> Self {
+    pub fn new(service: &'a SecretService, path: Path<'a>) -> Self {
         Self { service, path }
     }
 
@@ -247,20 +247,18 @@ impl<'a> Item<'a> {
     }
 }
 
-pub struct SecretServiceDbusStdProcessor {
+pub struct IoConnector {
     service: String,
     account: String,
-    dbus: SecretServiceStd,
-    pub secret: Option<(SecretSlice<u8>, Vec<u8>)>,
+    dbus: SecretService,
 }
 
-impl SecretServiceDbusStdProcessor {
-    pub fn try_new(service: impl ToString, account: impl ToString) -> Result<Self> {
+impl IoConnector {
+    pub fn new(service: impl ToString, account: impl ToString) -> Result<Self> {
         Ok(Self {
             service: service.to_string(),
             account: account.to_string(),
-            dbus: SecretServiceStd::connect()?,
-            secret: None,
+            dbus: SecretService::connect()?,
         })
     }
 
@@ -268,29 +266,31 @@ impl SecretServiceDbusStdProcessor {
         &self.dbus.connection
     }
 
-    pub fn save(&mut self, session_path: Path<'static>) -> Result<()> {
-        let Some((secret, salt)) = self.secret.take() else {
-            return Err(Error::WriteEmptySecretError);
-        };
+    pub fn read(&mut self, flow: &mut impl Flow) -> Result<()> {
+        let session = flow.clone_session_path();
+        let (_, salt, secret, _) = self
+            .dbus
+            .get_default_collection()?
+            .get_item(self.service.clone(), self.account.clone())?
+            .get_secret(session)?;
+        flow.give_secret(secret.into());
+        flow.give_salt(salt);
+        Ok(())
+    }
+
+    pub fn write(&mut self, flow: &mut impl Flow) -> Result<()> {
+        let session = flow.clone_session_path();
+        let secret = flow.take_secret().ok_or(Error::WriteEmptySecretError)?;
+        let salt = flow.take_salt().unwrap_or_default();
 
         self.dbus.get_default_collection()?.create_item(
             self.service.clone(),
             self.account.clone(),
             secret,
             salt,
-            session_path,
+            session,
         )?;
 
         Ok(())
-    }
-
-    pub fn read(&mut self, session_path: Path<'static>) -> Result<(SecretSlice<u8>, Vec<u8>)> {
-        let (_, salt, secret, _) = self
-            .dbus
-            .get_default_collection()?
-            .get_item(self.service.clone(), self.account.clone())?
-            .get_secret(session_path)?;
-
-        Ok((secret.into(), salt))
     }
 }

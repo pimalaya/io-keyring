@@ -1,8 +1,6 @@
-use secrecy::SecretString;
-
 #[derive(Clone, Debug)]
-pub enum EntryIo {
+pub enum Io {
     Read,
-    Write(SecretString),
+    Write,
     Delete,
 }

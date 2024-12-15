@@ -19,8 +19,10 @@ use rand::{rngs::OsRng, Rng};
 use secrecy::{ExposeSecret, SecretSlice, SecretString};
 
 use crate::secret_service::dbus_blocking::{
-    api::OrgFreedesktopSecretService, crypto::algorithm::Algorithm, std::Error, DBUS_DEST,
-    DBUS_PATH, TIMEOUT,
+    api::OrgFreedesktopSecretService,
+    crypto::{algorithm::Algorithm, Flow},
+    std::Error,
+    DBUS_DEST, DBUS_PATH, TIMEOUT,
 };
 
 static DH_GENERATOR: Lazy<BigUint> = Lazy::new(|| BigUint::from_u64(0x2).unwrap());
@@ -142,16 +144,16 @@ pub fn pow_base_exp_mod(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> Big
     result
 }
 
-pub struct SecretServiceOpensslStdProcessor {
-    encryption: Algorithm,
+pub struct IoConnector {
+    pub encryption: Algorithm,
     pub session_path: Path<'static>,
     shared_key: Option<AesKey>,
     pub secret_to_encrypt: Option<SecretString>,
     pub secret_to_decrypt: Option<(SecretSlice<u8>, Vec<u8>)>,
 }
 
-impl SecretServiceOpensslStdProcessor {
-    pub fn try_new(connection: &Connection, encryption: Algorithm) -> Result<Self, Error> {
+impl IoConnector {
+    pub fn new(connection: &Connection, encryption: Algorithm) -> Result<Self, Error> {
         let proxy = connection.with_proxy(DBUS_DEST, DBUS_PATH, TIMEOUT);
         let processor = match encryption {
             Algorithm::Plain => {
@@ -167,7 +169,7 @@ impl SecretServiceOpensslStdProcessor {
                     secret_to_decrypt: None,
                 }
             }
-            Algorithm::DhIetf1024Sha256Aes128CbcPkcs7 => {
+            Algorithm::Dh => {
                 let keypair = Keypair::generate();
 
                 // send our public key with algorithm to service
@@ -198,26 +200,27 @@ impl SecretServiceOpensslStdProcessor {
         Ok(processor)
     }
 
-    pub fn encrypt(&mut self) -> Result<(SecretSlice<u8>, Vec<u8>), Error> {
-        let Some(secret) = self.secret_to_encrypt.take() else {
-            return Err(Error::EncryptSecretEmptyError);
-        };
+    pub fn encrypt(&mut self, flow: &mut impl Flow) -> Result<(), Error> {
+        let secret = flow.take_secret().ok_or(Error::EncryptSecretEmptyError)?;
+        let secret = secret.expose_secret();
+        let key = &self.shared_key.unwrap();
 
-        let secret = secret.expose_secret().as_bytes();
-        let (secret, salt) =
-            encrypt(secret, &self.shared_key.unwrap()).map_err(Error::EncryptSecretError)?;
-        Ok((secret.into(), salt))
+        let (secret, salt) = encrypt(secret, key).map_err(Error::EncryptSecretError)?;
+        flow.give_secret(secret.into());
+        flow.give_salt(salt);
+
+        Ok(())
     }
 
-    pub fn decrypt(&mut self) -> Result<SecretString, Error> {
-        let Some((secret, salt)) = self.secret_to_decrypt.take() else {
-            return Err(Error::DecryptSecretEmptyError);
-        };
-
+    pub fn decrypt(&mut self, flow: &mut impl Flow) -> Result<(), Error> {
+        let secret = flow.take_secret().ok_or(Error::DecryptSecretEmptyError)?;
         let secret = secret.expose_secret();
-        let secret =
-            decrypt(secret, &self.shared_key.unwrap(), &salt).map_err(Error::DecryptSecretError)?;
-        let secret = String::from_utf8(secret).unwrap();
-        Ok(secret.into())
+        let salt = flow.take_salt().unwrap_or_default();
+        let key = &self.shared_key.unwrap();
+
+        let secret = decrypt(secret, key, &salt).map_err(Error::DecryptSecretError)?;
+        flow.give_secret(secret.into());
+
+        Ok(())
     }
 }

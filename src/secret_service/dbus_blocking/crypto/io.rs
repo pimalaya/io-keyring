@@ -1,5 +1,5 @@
 #[derive(Clone, Debug)]
-pub enum CryptoIo {
+pub enum Io {
     Encrypt,
     Decrypt,
 }

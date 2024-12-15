@@ -7,6 +7,8 @@ pub mod io;
 #[cfg(feature = "ss-dbus-std")]
 pub mod std;
 
+pub use self::{flow::Flow, io::Io};
+
 pub const TIMEOUT: Duration = Duration::from_secs(2);
 
 pub const DBUS_DEST: &str = "org.freedesktop.secrets";

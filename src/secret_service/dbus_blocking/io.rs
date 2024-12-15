@@ -1,8 +1,7 @@
+use super::crypto;
+
 #[derive(Clone, Debug)]
-pub enum SecretServiceIo {
-    Read,
-    Write,
-    Delete,
-    Encrypt,
-    Decrypt,
+pub enum Io {
+    Entry(crate::Io),
+    Crypto(crypto::Io),
 }

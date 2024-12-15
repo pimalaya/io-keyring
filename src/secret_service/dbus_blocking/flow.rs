@@ -1,6 +1,17 @@
-use secrecy::SecretString;
+use dbus::Path;
+use secrecy::SecretSlice;
 
-use super::io::SecretServiceIo;
+use super::{crypto, Io};
+
+pub trait Flow {
+    fn clone_session_path(&self) -> Path<'static>;
+
+    fn take_secret(&mut self) -> Option<SecretSlice<u8>>;
+    fn take_salt(&mut self) -> Option<Vec<u8>>;
+
+    fn give_secret(&mut self, secret: SecretSlice<u8>);
+    fn give_salt(&mut self, salt: Vec<u8>);
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReadEntryState {
@@ -11,29 +22,73 @@ pub enum ReadEntryState {
 #[derive(Clone, Debug)]
 pub struct ReadEntryFlow {
     state: Option<ReadEntryState>,
-    pub secret: Option<SecretString>,
+    pub session_path: Path<'static>,
+    pub secret: Option<SecretSlice<u8>>,
+    pub salt: Option<Vec<u8>>,
 }
 
 impl ReadEntryFlow {
-    pub fn new() -> Self {
+    pub fn new(session_path: Path<'static>) -> Self {
         Self {
             state: Some(ReadEntryState::Read),
+            session_path,
             secret: None,
+            salt: None,
         }
     }
 }
 
 impl Iterator for ReadEntryFlow {
-    type Item = SecretServiceIo;
+    type Item = Io;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.state.take()? {
             ReadEntryState::Read => {
                 self.state.replace(ReadEntryState::Decrypt);
-                Some(SecretServiceIo::Read)
+                Some(Io::Entry(crate::Io::Read))
             }
-            ReadEntryState::Decrypt => Some(SecretServiceIo::Decrypt),
+            ReadEntryState::Decrypt => Some(Io::Crypto(crypto::Io::Decrypt)),
         }
+    }
+}
+
+impl Flow for ReadEntryFlow {
+    fn clone_session_path(&self) -> Path<'static> {
+        self.session_path.clone()
+    }
+
+    fn take_secret(&mut self) -> Option<SecretSlice<u8>> {
+        self.secret.take()
+    }
+
+    fn take_salt(&mut self) -> Option<Vec<u8>> {
+        self.salt.take()
+    }
+
+    fn give_secret(&mut self, secret: SecretSlice<u8>) {
+        self.secret.replace(secret);
+    }
+
+    fn give_salt(&mut self, salt: Vec<u8>) {
+        self.salt.replace(salt);
+    }
+}
+
+impl crypto::Flow for ReadEntryFlow {
+    fn take_secret(&mut self) -> Option<SecretSlice<u8>> {
+        self.secret.take()
+    }
+
+    fn take_salt(&mut self) -> Option<Vec<u8>> {
+        self.salt.take()
+    }
+
+    fn give_secret(&mut self, secret: SecretSlice<u8>) {
+        self.secret.replace(secret);
+    }
+
+    fn give_salt(&mut self, salt: Vec<u8>) {
+        self.salt.replace(salt);
     }
 }
 
@@ -46,29 +101,73 @@ pub enum WriteEntryState {
 #[derive(Clone, Debug)]
 pub struct WriteEntryFlow {
     state: Option<WriteEntryState>,
-    pub secret: Option<SecretString>,
+    pub session_path: Path<'static>,
+    pub secret: Option<SecretSlice<u8>>,
+    pub salt: Option<Vec<u8>>,
 }
 
 impl WriteEntryFlow {
-    pub fn new(secret: impl Into<SecretString>) -> Self {
+    pub fn new(session_path: Path<'static>, secret: impl Into<SecretSlice<u8>>) -> Self {
         Self {
             state: Some(WriteEntryState::Encrypt),
+            session_path,
             secret: Some(secret.into()),
+            salt: None,
         }
     }
 }
 
 impl Iterator for WriteEntryFlow {
-    type Item = SecretServiceIo;
+    type Item = Io;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.state.take()? {
             WriteEntryState::Encrypt => {
                 self.state.replace(WriteEntryState::Write);
-                Some(SecretServiceIo::Encrypt)
+                Some(Io::Crypto(crypto::Io::Encrypt))
             }
-            WriteEntryState::Write => Some(SecretServiceIo::Write),
+            WriteEntryState::Write => Some(Io::Entry(crate::Io::Write)),
         }
+    }
+}
+
+impl Flow for WriteEntryFlow {
+    fn clone_session_path(&self) -> Path<'static> {
+        self.session_path.clone()
+    }
+
+    fn take_secret(&mut self) -> Option<SecretSlice<u8>> {
+        self.secret.take()
+    }
+
+    fn take_salt(&mut self) -> Option<Vec<u8>> {
+        self.salt.take()
+    }
+
+    fn give_secret(&mut self, secret: SecretSlice<u8>) {
+        self.secret.replace(secret);
+    }
+
+    fn give_salt(&mut self, salt: Vec<u8>) {
+        self.salt.replace(salt);
+    }
+}
+
+impl crypto::Flow for WriteEntryFlow {
+    fn take_secret(&mut self) -> Option<SecretSlice<u8>> {
+        self.secret.take()
+    }
+
+    fn take_salt(&mut self) -> Option<Vec<u8>> {
+        self.salt.take()
+    }
+
+    fn give_secret(&mut self, secret: SecretSlice<u8>) {
+        self.secret.replace(secret);
+    }
+
+    fn give_salt(&mut self, salt: Vec<u8>) {
+        self.salt.replace(salt);
     }
 }
 
@@ -86,9 +185,9 @@ impl Iterator for WriteEntryFlow {
 // }
 
 // impl Iterator for DeleteEntryFlow {
-//     type Item = SecretServiceIo;
+//     type Item = Io;
 
 //     fn next(&mut self) -> Option<Self::Item> {
-//         Some(SecretServiceIo::Entry(self.delete.take()?))
+//         Some(Io::Entry(self.delete.take()?))
 //     }
 // }
