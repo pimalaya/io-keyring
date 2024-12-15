@@ -19,11 +19,11 @@ rustdoc-args = ["--cfg", "docsrs"]
 name = "keyring"
 
 [features]
-default = ["ss-dbus-std", "ss-openssl-std"]
+default = ["ss-dbus-std", "ss-openssl-std", "apple-native-std"]
 
 # MacOS/iOS Keychain
 #
-apple-native = ["dep:security-framework"]
+apple-native-std = ["dep:security-framework"]
 
 # Windows Credential Manager
 #
@@ -42,14 +42,16 @@ vendored = ["dbus?/vendored", "openssl?/vendored"]
 dbus-codegen = { version = "0.12", default-features = false }
 
 [dependencies]
+secrecy = "0.10"
+thiserror = "2"
+tracing = "0.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
 dbus = { version = "0.9", optional = true }
 num = { version = "0.4", optional = true }
 once_cell = { version = "1", optional = true }
 openssl = { version = "0.10.68", optional = true }
 rand = { version = "0.8", optional = true }
-secrecy = "0.10"
-thiserror = "2"
-tracing = "0.1"
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 security-framework = { version = "3", default-features = false, optional = true }

@@ -1,53 +1,41 @@
-use std::string::FromUtf8Error;
-
 use secrecy::ExposeSecret;
 use security_framework::{
     base::Error as SecurityFrameworkError,
-    passwords::{delete_generic_password, get_generic_password, set_generic_password},
+    passwords::{get_generic_password, set_generic_password},
 };
 use thiserror::Error;
 
-use crate::{
-    event::KeyringEvent,
-    state::{KeyringEntry, KeyringState},
-};
+use super::Flow;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("cannot read secret from OSX keychain at {1}:{2}")]
-    ReadSecretError(#[source] SecurityFrameworkError, String, String),
-    #[error("cannot update secret from OSX keychain at {1}:{2}")]
-    UpdateSecretError(#[source] SecurityFrameworkError, String, String),
-    #[error("cannot delete secret from OSX keychain at {1}:{2}")]
-    DeleteSecretError(#[source] SecurityFrameworkError, String, String),
-    #[error("cannot parse secret as UTF-8 string")]
-    ParseSecretError(#[from] FromUtf8Error),
+    #[error("cannot read secret from OSX keychain")]
+    ReadSecretError(#[source] SecurityFrameworkError),
+    #[error("cannot write undefined secret to OSX keychain")]
+    WriteUndefinedSecretError,
+    #[error("cannot write secret to OSX keychain")]
+    WriteSecretError(#[source] SecurityFrameworkError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn progress(state: &mut KeyringEntry) -> Result<Option<KeyringEvent>> {
-    match state.next() {
-        None => Ok(None),
-        Some(KeyringState::ReadSecret) => {
-            let secret = get_generic_password(&state.service, &state.account).map_err(|err| {
-                Error::UpdateSecretError(err, state.service.clone(), state.account.clone())
-            })?;
-            let secret = String::from_utf8(secret)?;
-            Ok(Some(KeyringEvent::SecretRead(secret.into())))
-        }
-        Some(KeyringState::UpdateSecret(secret)) => {
-            let secret = secret.expose_secret().as_bytes();
-            set_generic_password(&state.service, &state.account, secret).map_err(|err| {
-                Error::UpdateSecretError(err, state.service.clone(), state.account.clone())
-            })?;
-            Ok(Some(KeyringEvent::SecretUpdated))
-        }
-        Some(KeyringState::DeleteSecret) => {
-            delete_generic_password(&state.service, &state.account).map_err(|err| {
-                Error::DeleteSecretError(err, state.service.clone(), state.account.clone())
-            })?;
-            Ok(Some(KeyringEvent::SecretDeleted))
-        }
+pub struct IoConnector;
+
+impl IoConnector {
+    pub fn read(flow: &mut impl Flow) -> Result<()> {
+        let service = flow.get_service();
+        let account = flow.get_account();
+        let secret = get_generic_password(service, account).map_err(Error::ReadSecretError)?;
+        flow.put_secret(secret.into());
+        Ok(())
+    }
+
+    pub fn write(flow: &mut impl Flow) -> Result<()> {
+        let secret = flow.take_secret().ok_or(Error::WriteUndefinedSecretError)?;
+        let service = flow.get_service();
+        let account = flow.get_account();
+        let secret = secret.expose_secret();
+        set_generic_password(service, account, secret).map_err(Error::WriteSecretError)?;
+        Ok(())
     }
 }

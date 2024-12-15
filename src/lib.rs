@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 #[cfg(target_vendor = "apple")]
-#[cfg(feature = "apple-native")]
+#[cfg(feature = "apple-native-std")]
 pub mod apple;
 pub mod event;
 mod io;
