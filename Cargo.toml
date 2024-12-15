@@ -27,7 +27,7 @@ apple-native-std = ["dep:security-framework"]
 
 # Windows Credential Manager
 #
-# windows-native-std = ["dep:byteorder", "dep:windows-sys"]
+windows-native-std = ["dep:byteorder", "dep:windows-sys"]
 
 # Secret service, based on D-Bus
 #
@@ -56,6 +56,6 @@ rand = { version = "0.8", optional = true }
 [target.'cfg(target_vendor = "apple")'.dependencies]
 security-framework = { version = "3", default-features = false, optional = true }
 
-# [target.'cfg(target_os = "windows")'.dependencies]
-# byteorder = { version = "1.2", optional = true }
-# windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials"], optional = true }
+[target.'cfg(target_os = "windows")'.dependencies]
+byteorder = { version = "1.2", optional = true }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials"], optional = true }

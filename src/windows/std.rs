@@ -17,13 +17,12 @@ use windows_sys::Win32::{
     },
 };
 
-use crate::{
-    event::KeyringEvent,
-    state::{KeyringEntry, KeyringState},
-};
+use super::Flow;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("cannot write undefined secret to Windows Credentials")]
+    WriteUndefinedSecretError,
     #[error("secret length cannot exceed {CRED_MAX_CREDENTIAL_BLOB_SIZE}")]
     SecretTooLongError,
     #[error("secret length cannot exceed {CRED_MAX_USERNAME_LENGTH}")]
@@ -81,8 +80,8 @@ pub struct WinCredential {
 // PCREDENTIALW = *mut CREDENTIALW
 
 impl WinCredential {
-    pub fn try_new(service: impl ToString, user: impl ToString) -> Result<WinCredential> {
-        let username = user.to_string();
+    pub fn try_new(service: impl ToString, username: impl ToString) -> Result<WinCredential> {
+        let username = username.to_string();
 
         if username.len() > CRED_MAX_USERNAME_LENGTH as usize {
             return Err(Error::UsernameTooLongError);
@@ -373,22 +372,23 @@ unsafe fn from_wstr(ws: *const u16) -> String {
     String::from_utf16_lossy(slice)
 }
 
-pub fn progress(state: &mut KeyringEntry) -> Result<Option<KeyringEvent>> {
-    match state.next() {
-        None => Ok(None),
-        Some(KeyringState::ReadSecret) => {
-            let secret =
-                WinCredential::try_new(&state.service, &state.account)?.get_secret_string()?;
-            Ok(Some(KeyringEvent::SecretRead(secret)))
-        }
-        Some(KeyringState::UpdateSecret(secret)) => {
-            WinCredential::try_new(&state.service, &state.account)?.set_secret_string(secret)?;
-            Ok(Some(KeyringEvent::SecretUpdated))
-        }
-        Some(KeyringState::DeleteSecret) => {
-            WinCredential::try_new(&state.service, &state.account)?.delete_entry()?;
-            Ok(Some(KeyringEvent::SecretDeleted))
-        }
+pub struct IoConnector;
+
+impl IoConnector {
+    pub fn read(flow: &mut impl Flow) -> Result<()> {
+        let service = flow.get_service();
+        let username = flow.get_username();
+        let secret = WinCredential::try_new(service, username)?.get_secret_bytes()?;
+        flow.put_secret(secret);
+        Ok(())
+    }
+
+    pub fn write(flow: &mut impl Flow) -> Result<()> {
+        let secret = flow.take_secret().ok_or(Error::WriteUndefinedSecretError)?;
+        let service = flow.get_service();
+        let username = flow.get_username();
+        WinCredential::try_new(service, username)?.set_secret_bytes(secret)?;
+        Ok(())
     }
 }
 

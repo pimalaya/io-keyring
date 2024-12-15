@@ -9,8 +9,8 @@ pub mod apple;
 #[cfg(target_os = "linux")]
 #[cfg(feature = "ss-dbus-std")]
 pub mod secret_service;
-#[cfg(target_os = "windows")]
-#[cfg(feature = "windows-native")]
+#[cfg(any(debug_assertions, target_os = "windows"))]
+#[cfg(feature = "windows-native-std")]
 pub mod windows;
 
 pub use io::Io;
