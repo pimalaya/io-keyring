@@ -7,9 +7,12 @@ mod io;
 #[cfg(feature = "apple-native-std")]
 pub mod apple;
 #[cfg(target_os = "linux")]
-#[cfg(feature = "secret-service-dbus-std")]
+#[cfg(any(
+    feature = "secret-service-dbus-std",
+    feature = "secret-service-dbus-tokio"
+))]
 pub mod secret_service;
-#[cfg(any(debug_assertions, target_os = "windows"))]
+#[cfg(target_os = "windows")]
 #[cfg(feature = "windows-native-std")]
 pub mod windows;
 

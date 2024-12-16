@@ -33,7 +33,7 @@ full = [
 secret-service-dbus-std = ["dep:dbus"]
 secret-service-dbus-tokio = ["dep:dbus-tokio", "dep:tokio"]
 secret-service-dbus-openssl-std = ["dep:num", "dep:openssl", "dep:once_cell", "dep:rand"]
-secret-service-dbus-rust-crypto-std = ["dep:aes", "dep:block-padding", "dep:cbc", "dep:hkdf", "dep:sha2", "secret-service-dbus-std"]
+secret-service-dbus-rust-crypto-std = ["dep:aes", "dep:block-padding", "dep:cbc", "dep:hkdf", "dep:sha2"]
 
 # MacOS/iOS Keychain
 #
