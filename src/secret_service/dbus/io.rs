@@ -1,4 +1,4 @@
-use super::crypto;
+use crate::secret_service::dbus::crypto;
 
 #[derive(Clone, Debug)]
 pub enum Io {

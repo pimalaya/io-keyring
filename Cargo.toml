@@ -20,11 +20,19 @@ name = "keyring"
 
 [features]
 default = []
+full = [
+  "secret-service-dbus-std",
+  "secret-service-dbus-openssl-std",
+  "secret-service-dbus-rust-crypto-std",
+
+  "secret-service-dbus-tokio",
+]
 
 # Linux Secret service, based on D-Bus
 #
 secret-service-dbus-std = ["dep:dbus"]
-secret-service-dbus-openssl-std = ["dep:num", "dep:openssl", "dep:once_cell", "dep:rand", "secret-service-dbus-std"]
+secret-service-dbus-tokio = ["dep:dbus-tokio", "dep:tokio"]
+secret-service-dbus-openssl-std = ["dep:num", "dep:openssl", "dep:once_cell", "dep:rand"]
 secret-service-dbus-rust-crypto-std = ["dep:aes", "dep:block-padding", "dep:cbc", "dep:hkdf", "dep:sha2", "secret-service-dbus-std"]
 
 # MacOS/iOS Keychain
@@ -42,6 +50,9 @@ vendored = ["dbus?/vendored", "openssl?/vendored"]
 [build-dependencies]
 dbus-codegen = { version = "0.12", default-features = false }
 
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
 [dependencies]
 secrecy = "0.10"
 thiserror = "2"
@@ -52,12 +63,14 @@ aes = { version = "0.8", optional = true }
 block-padding = { version = "0.3", features = ["std"], optional = true }
 cbc = { version = "0.1", features = ["block-padding", "alloc"], optional = true }
 dbus = { version = "0.9", optional = true }
+dbus-tokio = { version = "0.7", optional = true }
 hkdf = { version = "0.12", features = ["std"], optional = true }
 num = { version = "0.4", optional = true }
 once_cell = { version = "1", optional = true }
 openssl = { version = "0.10", optional = true }
 rand = { version = "0.8", optional = true }
 sha2 = { version = "0.10", optional = true }
+tokio = { version = "1", features = ["rt"], optional = true }
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 security-framework = { version = "3", default-features = false, optional = true }

@@ -1,15 +1,6 @@
-use ::std::time::Duration;
+use std::time::Duration;
 
-pub mod api;
-pub mod crypto;
-pub mod flow;
-pub mod io;
-#[cfg(feature = "secret-service-dbus-std")]
-pub mod std;
-
-pub use self::{flow::Flow, io::Io};
-
-pub const TIMEOUT: Duration = Duration::from_secs(2);
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub const DBUS_DEST: &str = "org.freedesktop.secrets";
 pub const DBUS_PATH: &str = "/org/freedesktop/secrets";

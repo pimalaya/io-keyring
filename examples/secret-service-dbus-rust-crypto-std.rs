@@ -3,9 +3,10 @@
 #![cfg(feature = "secret-service-dbus-rust-crypto-std")]
 
 use keyring::{
-    secret_service::dbus_blocking::{
+    secret_service::dbus::{
         self,
-        crypto::{self, algorithm::Algorithm},
+        blocking::std::IoConnector as DbusIoConnector,
+        crypto::{self, algorithm::Algorithm, rust_crypto::std::IoConnector as CryptoIoConnector},
         flow::{ReadEntryFlow, WriteEntryFlow},
     },
     Io,
@@ -17,22 +18,18 @@ fn main() {
     const ACCOUNT: &str = "account";
     const SECRET: &str = "test";
 
-    let mut entry = dbus_blocking::std::IoConnector::new(SERVICE, ACCOUNT).unwrap();
-    let mut crypto = dbus_blocking::crypto::rust_crypto::std::IoConnector::new(
-        entry.connection(),
-        Algorithm::Dh,
-    )
-    .unwrap();
+    let mut dbus = DbusIoConnector::new(SERVICE, ACCOUNT, Algorithm::Dh).unwrap();
+    let mut crypto = CryptoIoConnector::new(dbus.session()).unwrap();
 
     println!("write secret {SECRET:?} to entry {SERVICE}:{ACCOUNT}");
-    let mut flow = WriteEntryFlow::new(crypto.session_path.clone(), SECRET.as_bytes().to_vec());
+    let mut flow = WriteEntryFlow::new(SECRET.as_bytes().to_vec());
     while let Some(io) = flow.next() {
         match io {
-            dbus_blocking::Io::Crypto(crypto::Io::Encrypt) => {
+            dbus::Io::Crypto(crypto::Io::Encrypt) => {
                 crypto.encrypt(&mut flow).unwrap();
             }
-            dbus_blocking::Io::Entry(Io::Write) => {
-                entry.write(&mut flow).unwrap();
+            dbus::Io::Entry(Io::Write) => {
+                dbus.write(&mut flow).unwrap();
             }
             _ => {
                 unreachable!();
@@ -40,13 +37,13 @@ fn main() {
         }
     }
 
-    let mut flow = ReadEntryFlow::new(crypto.session_path.clone());
+    let mut flow = ReadEntryFlow::new();
     while let Some(io) = flow.next() {
         match io {
-            dbus_blocking::Io::Entry(Io::Read) => {
-                entry.read(&mut flow).unwrap();
+            dbus::Io::Entry(Io::Read) => {
+                dbus.read(&mut flow).unwrap();
             }
-            dbus_blocking::Io::Crypto(crypto::Io::Decrypt) => {
+            dbus::Io::Crypto(crypto::Io::Decrypt) => {
                 crypto.decrypt(&mut flow).unwrap();
             }
             _ => unreachable!(),

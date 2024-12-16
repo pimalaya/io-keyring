@@ -3,74 +3,42 @@ use aes::cipher::{
 };
 use block_padding::UnpadError;
 use cbc::{Decryptor, Encryptor};
-use dbus::{
-    arg::{cast, RefArg, Variant},
-    blocking::Connection,
-    Path,
-};
+use dbus::{arg::cast, Path};
 use hkdf::{Hkdf, InvalidLength};
+use num::BigUint;
 use rand::{rngs::OsRng, Rng};
 use secrecy::ExposeSecret;
 use sha2::Sha256;
 
-use crate::secret_service::dbus_blocking::{
-    self,
-    api::OrgFreedesktopSecretService,
+use crate::secret_service::dbus::{
     crypto::{
-        algorithm::Algorithm,
-        common::{prepare_derive_shared, AesKey, Keypair},
-        Error, Flow,
+        common::{prepare_derive_shared, AesKey},
+        Algorithm, Error, Flow,
     },
-    DBUS_DEST, DBUS_PATH, TIMEOUT,
+    Session,
 };
 
+#[derive(Clone, Debug, Default)]
 pub struct IoConnector {
-    pub encryption: Algorithm,
-    pub session_path: Path<'static>,
+    session_path: Path<'static>,
     shared_key: Option<AesKey>,
 }
 
 impl IoConnector {
-    pub fn new(connection: &Connection, encryption: Algorithm) -> dbus_blocking::std::Result<Self> {
-        let proxy = connection.with_proxy(DBUS_DEST, DBUS_PATH, TIMEOUT);
-        let processor = match encryption {
-            Algorithm::Plain => {
-                let (_, session_path) = proxy
-                    .open_session(encryption.as_ref(), Variant(Box::new(String::new())))
-                    .map_err(dbus_blocking::std::Error::OpenSessionError)?;
+    pub fn new(session: &Session) -> Result<Self, Error> {
+        let mut connector = Self::default();
+        connector.session_path = session.path.clone();
 
-                Self {
-                    encryption,
-                    session_path,
-                    shared_key: None,
-                }
-            }
-            Algorithm::Dh => {
-                let keypair = Keypair::generate();
+        if let Algorithm::Dh = session.encryption() {
+            let pubkey = cast::<Vec<u8>>(session.output()).ok_or(Error::ParsePubkeyError)?;
+            let privkey = session.privkey().ok_or(Error::GetPrivkeyMissingError)?;
+            let shared_key =
+                derive_shared(privkey, pubkey).map_err(Error::DeriveSharedKeyRustCryptoError)?;
 
-                // send our public key with algorithm to service
-                let public_bytes = keypair.public.to_bytes_be();
-                let bytes_arg = Variant(Box::new(public_bytes) as Box<dyn RefArg>);
-                let (out, session_path) = proxy
-                    .open_session(encryption.as_ref(), bytes_arg)
-                    .map_err(dbus_blocking::std::Error::OpenSessionError)?;
-
-                let Some(server_public_key_bytes) = cast::<Vec<u8>>(&out.0) else {
-                    return Err(dbus_blocking::std::Error::CastServerPublicKeyToBytesError);
-                };
-
-                let shared_key = derive_shared(&keypair, server_public_key_bytes)
-                    .map_err(Error::DeriveSharedKeyRustCryptoError)?;
-
-                Self {
-                    encryption,
-                    session_path,
-                    shared_key: Some(shared_key),
-                }
-            }
+            connector.shared_key.replace(shared_key);
         };
 
-        Ok(processor)
+        Ok(connector)
     }
 
     pub fn encrypt(&mut self, flow: &mut impl Flow) -> Result<(), Error> {
@@ -129,11 +97,8 @@ fn hkdf(ikm: Vec<u8>, salt: Option<&[u8]>, okm: &mut [u8]) -> Result<(), Invalid
     hk.expand(&[], okm)
 }
 
-fn derive_shared(
-    keypair: &Keypair,
-    server_public_key_bytes: &[u8],
-) -> Result<AesKey, InvalidLength> {
-    let (ikm, mut okm) = prepare_derive_shared(keypair, server_public_key_bytes);
+fn derive_shared(privkey: &BigUint, pubkey: &[u8]) -> Result<AesKey, InvalidLength> {
+    let (ikm, mut okm) = prepare_derive_shared(privkey, pubkey);
     hkdf(ikm, None, &mut okm)?;
     Ok(okm)
 }

@@ -2,6 +2,11 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("cannot parse public key for encrypted D-Bus communication")]
+    ParsePubkeyError,
+    #[error("cannot find private key for encrypted D-Bus communication")]
+    GetPrivkeyMissingError,
+
     #[error("cannot encrypt undefined secret")]
     EncryptUndefinedSecretError,
     #[error("cannot encrypt secret: missing key")]

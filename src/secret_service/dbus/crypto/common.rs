@@ -8,8 +8,8 @@ use num::{
 use once_cell::sync::Lazy;
 use rand::{rngs::OsRng, Rng};
 
-static DH_GENERATOR: Lazy<BigUint> = Lazy::new(|| BigUint::from_u64(0x2).unwrap());
-static DH_PRIME: Lazy<BigUint> = Lazy::new(|| {
+pub static DH_GENERATOR: Lazy<BigUint> = Lazy::new(|| BigUint::from_u64(0x2).unwrap());
+pub static DH_PRIME: Lazy<BigUint> = Lazy::new(|| {
     BigUint::from_bytes_be(&[
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xC9, 0x0F, 0xDA, 0xA2, 0x21, 0x68, 0xC2,
         0x34, 0xC4, 0xC6, 0x62, 0x8B, 0x80, 0xDC, 0x1C, 0xD1, 0x29, 0x02, 0x4E, 0x08, 0x8A, 0x67,
@@ -23,37 +23,34 @@ static DH_PRIME: Lazy<BigUint> = Lazy::new(|| {
     ])
 });
 
-pub(super) type AesKey = [u8; 16];
+pub type AesKey = [u8; 16];
 
 #[derive(Clone)]
-pub(super) struct Keypair {
-    pub(super) private: BigUint,
-    pub(super) public: BigUint,
+pub struct Keypair {
+    pub private: BigUint,
+    pub public: BigUint,
 }
 
 impl Keypair {
-    pub(super) fn generate() -> Self {
+    pub fn generate() -> Self {
         let mut rng = OsRng;
-        let mut private_key_bytes = [0; 128];
-        rng.fill(&mut private_key_bytes);
+        let mut privkey = [0; 128];
+        rng.fill(&mut privkey);
 
-        let private_key = BigUint::from_bytes_be(&private_key_bytes);
-        let public_key = pow_base_exp_mod(&DH_GENERATOR, &private_key, &DH_PRIME);
+        let privkey = BigUint::from_bytes_be(&privkey);
+        let pubkey = pow_base_exp_mod(&DH_GENERATOR, &privkey, &DH_PRIME);
 
         Self {
-            private: private_key,
-            public: public_key,
+            private: privkey,
+            public: pubkey,
         }
     }
 }
 
-pub(super) fn prepare_derive_shared(
-    keypair: &Keypair,
-    server_public_key_bytes: &[u8],
-) -> (Vec<u8>, [u8; 16]) {
+pub fn prepare_derive_shared(privkey: &BigUint, pubkey: &[u8]) -> (Vec<u8>, [u8; 16]) {
     // Derive the shared secret the server and us.
-    let server_public_key = BigUint::from_bytes_be(server_public_key_bytes);
-    let common_secret = pow_base_exp_mod(&server_public_key, &keypair.private, &DH_PRIME);
+    let pubkey = BigUint::from_bytes_be(pubkey);
+    let common_secret = pow_base_exp_mod(&pubkey, privkey, &DH_PRIME);
 
     let common_secret_bytes = common_secret.to_bytes_be();
     let mut common_secret_padded = vec![0; 128 - common_secret_bytes.len()];
@@ -64,7 +61,7 @@ pub(super) fn prepare_derive_shared(
 }
 
 /// from https://github.com/plietar/librespot/blob/master/core/src/util/mod.rs#L53
-fn pow_base_exp_mod(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> BigUint {
+pub fn pow_base_exp_mod(base: &BigUint, exp: &BigUint, modulus: &BigUint) -> BigUint {
     let mut base = base.clone();
     let mut exp = exp.clone();
     let mut result: BigUint = One::one();

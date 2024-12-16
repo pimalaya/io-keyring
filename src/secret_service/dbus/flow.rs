@@ -1,11 +1,10 @@
-use dbus::Path;
 use secrecy::SecretSlice;
 
-use super::{crypto, Io};
+use crate::secret_service::dbus::crypto;
+
+use super::Io;
 
 pub trait Flow {
-    fn clone_session_path(&self) -> Path<'static>;
-
     fn take_secret(&mut self) -> Option<SecretSlice<u8>>;
     fn take_salt(&mut self) -> Option<Vec<u8>>;
 
@@ -22,16 +21,14 @@ pub enum ReadEntryState {
 #[derive(Clone, Debug)]
 pub struct ReadEntryFlow {
     state: Option<ReadEntryState>,
-    pub session_path: Path<'static>,
     pub secret: Option<SecretSlice<u8>>,
     pub salt: Option<Vec<u8>>,
 }
 
 impl ReadEntryFlow {
-    pub fn new(session_path: Path<'static>) -> Self {
+    pub fn new() -> Self {
         Self {
             state: Some(ReadEntryState::Read),
-            session_path,
             secret: None,
             salt: None,
         }
@@ -53,10 +50,6 @@ impl Iterator for ReadEntryFlow {
 }
 
 impl Flow for ReadEntryFlow {
-    fn clone_session_path(&self) -> Path<'static> {
-        self.session_path.clone()
-    }
-
     fn take_secret(&mut self) -> Option<SecretSlice<u8>> {
         self.secret.take()
     }
@@ -101,16 +94,14 @@ pub enum WriteEntryState {
 #[derive(Clone, Debug)]
 pub struct WriteEntryFlow {
     state: Option<WriteEntryState>,
-    pub session_path: Path<'static>,
     pub secret: Option<SecretSlice<u8>>,
     pub salt: Option<Vec<u8>>,
 }
 
 impl WriteEntryFlow {
-    pub fn new(session_path: Path<'static>, secret: impl Into<SecretSlice<u8>>) -> Self {
+    pub fn new(secret: impl Into<SecretSlice<u8>>) -> Self {
         Self {
             state: Some(WriteEntryState::Encrypt),
-            session_path,
             secret: Some(secret.into()),
             salt: None,
         }
@@ -132,10 +123,6 @@ impl Iterator for WriteEntryFlow {
 }
 
 impl Flow for WriteEntryFlow {
-    fn clone_session_path(&self) -> Path<'static> {
-        self.session_path.clone()
-    }
-
     fn take_secret(&mut self) -> Option<SecretSlice<u8>> {
         self.secret.take()
     }

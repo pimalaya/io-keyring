@@ -1,16 +1,24 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use dbus::{
     arg::{PropMap, RefArg, Variant},
-    blocking::{Connection, Proxy},
+    nonblock::{Proxy, SyncConnection},
     Path,
 };
+use dbus_tokio::connection::{new_session_sync, IOResourceError};
 use secrecy::{ExposeSecret, SecretSlice};
 use thiserror::Error;
+use tokio::task::{JoinError, JoinHandle};
+use tracing::error;
 
-use super::{
-    api::{OrgFreedesktopSecretCollection, OrgFreedesktopSecretItem, OrgFreedesktopSecretService},
-    crypto, Flow, DBUS_DEST, DBUS_PATH, ITEM_ATTRIBUTES, ITEM_LABEL, TIMEOUT,
+use crate::secret_service::dbus::{
+    common::{DBUS_DEST, DBUS_PATH, DEFAULT_TIMEOUT, ITEM_ATTRIBUTES, ITEM_LABEL},
+    crypto::{self, common::Keypair, Algorithm},
+    Flow, Session,
+};
+
+use super::api::{
+    OrgFreedesktopSecretCollection, OrgFreedesktopSecretItem, OrgFreedesktopSecretService,
 };
 
 #[derive(Debug, Error)]
@@ -42,36 +50,85 @@ pub enum Error {
     #[error("cannot write empty secret into Secret Service entry using D-Bus")]
     WriteEmptySecretError,
 
+    #[error("lost connection to D-Bus")]
+    ConnectionLostError(#[source] IOResourceError),
+
     #[error(transparent)]
     CryptoError(#[from] crypto::Error),
+    #[error(transparent)]
+    TokioJoinError(#[from] JoinError),
 }
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 pub struct SecretService {
-    connection: Connection,
+    connection: Arc<SyncConnection>,
+    session: Session,
+    handle: JoinHandle<()>,
 }
 
 impl fmt::Debug for SecretService {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SecretServiceStd")
+        f.debug_struct("SecretService")
             .field("connection", &self.connection.unique_name())
+            .field("session", &self.session)
+            .field("handle", &self.handle)
             .finish()
     }
 }
 
 impl SecretService {
-    pub fn connect() -> Result<Self> {
-        let connection = Connection::new_session().map_err(Error::CreateSessionError)?;
-        Ok(Self { connection })
+    pub async fn connect(encryption: Algorithm) -> Result<Self> {
+        let alg = encryption.as_ref();
+
+        let new_session = tokio::task::spawn_blocking(new_session_sync);
+        let (resource, connection) = new_session.await?.map_err(Error::CreateSessionError)?;
+
+        let handle = tokio::spawn(async move {
+            let err = resource.await;
+            error!("lost connection to D-Bus: {err}");
+        });
+
+        let proxy = Proxy::new(DBUS_DEST, DBUS_PATH, DEFAULT_TIMEOUT, connection.clone());
+        let session = match &encryption {
+            Algorithm::Plain => {
+                let input = Variant(Box::new(String::new()) as Box<dyn RefArg>);
+                let (_, session_path) = proxy
+                    .open_session(alg, input)
+                    .await
+                    .map_err(Error::OpenSessionError)?;
+                Session::new_plain(session_path)
+            }
+            Algorithm::Dh => {
+                let keypair = Keypair::generate();
+                let input = Variant(Box::new(keypair.public.to_bytes_be()) as Box<dyn RefArg>);
+                let (output, session_path) = proxy
+                    .open_session(alg, input)
+                    .await
+                    .map_err(Error::OpenSessionError)?;
+                Session::new_dh(keypair, output.0, session_path)
+            }
+        };
+
+        Ok(Self {
+            connection,
+            session,
+            handle,
+        })
     }
 
-    pub fn get_default_collection(&self) -> Result<Collection<'_>> {
-        let proxy = self.connection.with_proxy(DBUS_DEST, DBUS_PATH, TIMEOUT);
+    pub async fn get_default_collection(&self) -> Result<Collection<'_>> {
+        let proxy = Proxy::new(
+            DBUS_DEST,
+            DBUS_PATH,
+            DEFAULT_TIMEOUT,
+            self.connection.clone(),
+        );
         let empty_path = Path::default();
 
         let collection_path = proxy
             .read_alias("default")
+            .await
             .map_err(Error::GetDefaultCollectionError)?;
 
         if collection_path != empty_path {
@@ -80,13 +137,17 @@ impl SecretService {
 
         let collection_path = proxy
             .read_alias("session")
+            .await
             .map_err(Error::GetSessionCollectionError)?;
 
         if collection_path != empty_path {
             return Ok(Collection::new(self, collection_path));
         }
 
-        let collections_path = proxy.collections().map_err(Error::GetCollectionsError)?;
+        let collections_path = proxy
+            .collections()
+            .await
+            .map_err(Error::GetCollectionsError)?;
 
         match collections_path.into_iter().next() {
             Some(collection_path) => Ok(Collection::new(self, collection_path)),
@@ -98,6 +159,7 @@ impl SecretService {
 
                 let (collection_path, _prompt_path) = proxy
                     .create_collection(props, "default")
+                    .await
                     .map_err(Error::CreateDefaultCollectionError)?;
 
                 let collection_path = if collection_path == empty_path {
@@ -130,13 +192,12 @@ impl<'a> Collection<'a> {
         Self { service, path }
     }
 
-    pub fn proxy(&self) -> Proxy<'_, &'a Connection> {
-        self.service
-            .connection
-            .with_proxy(DBUS_DEST, &self.path, TIMEOUT)
+    pub fn proxy(&self) -> Proxy<'_, &'a SyncConnection> {
+        let conn = self.service.connection.as_ref();
+        Proxy::new(DBUS_DEST, &self.path, DEFAULT_TIMEOUT, conn)
     }
 
-    pub fn find_item(
+    pub async fn find_item(
         &self,
         service: impl AsRef<str>,
         account: impl AsRef<str>,
@@ -146,6 +207,7 @@ impl<'a> Collection<'a> {
             HashMap::from_iter([("service", service.as_ref()), ("account", account.as_ref())]);
 
         let items_path = OrgFreedesktopSecretCollection::search_items(&proxy, attrs)
+            .await
             .map_err(Error::SearchItemsError)?;
 
         match items_path.into_iter().next() {
@@ -154,11 +216,15 @@ impl<'a> Collection<'a> {
         }
     }
 
-    pub fn get_item(&self, service: impl AsRef<str>, account: impl AsRef<str>) -> Result<Item> {
+    pub async fn get_item(
+        &self,
+        service: impl AsRef<str>,
+        account: impl AsRef<str>,
+    ) -> Result<Item> {
         let service = service.as_ref();
         let account = account.as_ref();
 
-        match self.find_item(service, account)? {
+        match self.find_item(service, account).await? {
             Some(item) => Ok(item),
             None => {
                 let service = service.to_owned();
@@ -168,13 +234,12 @@ impl<'a> Collection<'a> {
         }
     }
 
-    pub fn create_item(
+    pub async fn create_item(
         &self,
         service: impl ToString,
         account: impl ToString,
         secret: impl Into<SecretSlice<u8>>,
         salt: Vec<u8>,
-        session_path: Path<'static>,
     ) -> Result<Item<'_>> {
         let secret = secret.into().expose_secret().to_vec();
         let label = Box::new(service.to_string() + ":" + &account.to_string());
@@ -187,10 +252,12 @@ impl<'a> Collection<'a> {
         props.insert(ITEM_LABEL.into(), Variant(label));
         props.insert(ITEM_ATTRIBUTES.into(), Variant(attrs));
 
-        let secret = (session_path, salt, secret, "text/plain");
+        let session = self.service.session.path.clone();
+        let secret = (session, salt, secret, "text/plain");
         let (item_path, _prompt_path) = self
             .proxy()
             .create_item(props, secret, true)
+            .await
             .map_err(Error::CreateItemError)?;
 
         let item_path = if item_path == Path::default() {
@@ -203,8 +270,12 @@ impl<'a> Collection<'a> {
         Ok(Item::new(&self.service, item_path))
     }
 
-    pub fn delete_item(&self, service: impl AsRef<str>, account: impl AsRef<str>) -> Result<()> {
-        self.get_item(service, account)?.delete()?;
+    pub async fn delete_item(
+        &self,
+        service: impl AsRef<str>,
+        account: impl AsRef<str>,
+    ) -> Result<()> {
+        self.get_item(service, account).await?.delete().await?;
         Ok(())
     }
 }
@@ -220,23 +291,24 @@ impl<'a> Item<'a> {
         Self { service, path }
     }
 
-    pub fn proxy(&self) -> Proxy<'_, &'a Connection> {
-        self.service
-            .connection
-            .with_proxy(DBUS_DEST, &self.path, TIMEOUT)
+    pub fn proxy(&self) -> Proxy<'_, &'a SyncConnection> {
+        let conn = self.service.connection.as_ref();
+        Proxy::new(DBUS_DEST, &self.path, DEFAULT_TIMEOUT, conn)
     }
 
-    pub fn get_secret(
-        &self,
-        session_path: Path<'static>,
-    ) -> Result<(Path<'static>, Vec<u8>, Vec<u8>, String)> {
+    pub async fn get_secret(&self) -> Result<(Path<'static>, Vec<u8>, Vec<u8>, String)> {
         let proxy = &self.proxy();
-        OrgFreedesktopSecretItem::get_secret(proxy, session_path).map_err(Error::GetSecretError)
+        let session = self.service.session.path.clone();
+        OrgFreedesktopSecretItem::get_secret(proxy, session)
+            .await
+            .map_err(Error::GetSecretError)
     }
 
-    pub fn delete(&self) -> Result<Path> {
+    pub async fn delete(&self) -> Result<Path> {
         let proxy = &self.proxy();
-        OrgFreedesktopSecretItem::delete(proxy).map_err(Error::DeleteItemError)
+        OrgFreedesktopSecretItem::delete(proxy)
+            .await
+            .map_err(Error::DeleteItemError)
     }
 }
 
@@ -247,42 +319,45 @@ pub struct IoConnector {
 }
 
 impl IoConnector {
-    pub fn new(service: impl ToString, account: impl ToString) -> Result<Self> {
+    pub async fn new(
+        service: impl ToString,
+        account: impl ToString,
+        encryption: Algorithm,
+    ) -> Result<Self> {
         Ok(Self {
             service: service.to_string(),
             account: account.to_string(),
-            dbus: SecretService::connect()?,
+            dbus: SecretService::connect(encryption).await?,
         })
     }
 
-    pub fn connection(&self) -> &Connection {
-        &self.dbus.connection
+    pub fn session(&self) -> &Session {
+        &self.dbus.session
     }
 
-    pub fn read(&mut self, flow: &mut impl Flow) -> Result<()> {
-        let session = flow.clone_session_path();
+    pub async fn read(&mut self, flow: &mut impl Flow) -> Result<()> {
         let (_, salt, secret, _) = self
             .dbus
-            .get_default_collection()?
-            .get_item(self.service.clone(), self.account.clone())?
-            .get_secret(session)?;
+            .get_default_collection()
+            .await?
+            .get_item(self.service.clone(), self.account.clone())
+            .await?
+            .get_secret()
+            .await?;
         flow.give_secret(secret.into());
         flow.give_salt(salt);
         Ok(())
     }
 
-    pub fn write(&mut self, flow: &mut impl Flow) -> Result<()> {
-        let session = flow.clone_session_path();
+    pub async fn write(&mut self, flow: &mut impl Flow) -> Result<()> {
         let secret = flow.take_secret().ok_or(Error::WriteEmptySecretError)?;
         let salt = flow.take_salt().unwrap_or_default();
 
-        self.dbus.get_default_collection()?.create_item(
-            self.service.clone(),
-            self.account.clone(),
-            secret,
-            salt,
-            session,
-        )?;
+        self.dbus
+            .get_default_collection()
+            .await?
+            .create_item(self.service.clone(), self.account.clone(), secret, salt)
+            .await?;
 
         Ok(())
     }

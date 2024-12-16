@@ -1,2 +1,5 @@
-#[cfg(feature = "secret-service-dbus-std")]
-pub mod dbus_blocking;
+#[cfg(any(
+    feature = "secret-service-dbus-std",
+    feature = "secret-service-dbus-tokio"
+))]
+pub mod dbus;

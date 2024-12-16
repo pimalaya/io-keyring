@@ -9,6 +9,7 @@ pub mod openssl;
 pub mod rust_crypto;
 
 pub use self::{
+    algorithm::Algorithm,
     error::{Error, Result},
     flow::Flow,
     io::Io,
