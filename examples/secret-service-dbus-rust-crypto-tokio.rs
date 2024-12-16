@@ -2,6 +2,8 @@
 #![cfg(feature = "secret-service-dbus-tokio")]
 #![cfg(feature = "secret-service-dbus-rust-crypto-std")]
 
+use std::env;
+
 use keyring::{
     secret_service::dbus::{
         self,
@@ -15,17 +17,25 @@ use secrecy::ExposeSecret;
 
 #[tokio::main]
 async fn main() {
-    const SERVICE: &str = "service";
-    const ACCOUNT: &str = "account";
-    const SECRET: &str = "test";
+    let service = env::var("SERVICE").unwrap_or(String::from("test-service"));
+    println!("using service name: {service:?}");
 
-    let mut dbus = DbusIoConnector::new(SERVICE, ACCOUNT, Algorithm::Dh)
+    let account = env::var("ACCOUNT").unwrap_or(String::from("test-account"));
+    println!("using account name: {service:?}");
+
+    let encryption = match env::var("ENCRYPTION") {
+        Ok(alg) if alg.trim().eq_ignore_ascii_case("dh") => Algorithm::Dh,
+        _ => Algorithm::Plain,
+    };
+    println!("using encryption algorithm: {encryption:?}");
+
+    let mut dbus = DbusIoConnector::new(&service, &account, encryption.clone())
         .await
         .unwrap();
     let mut crypto = CryptoIoConnector::new(dbus.session()).unwrap();
 
-    println!("write secret {SECRET:?} to entry {SERVICE}:{ACCOUNT}");
-    let mut flow = WriteEntryFlow::new(SECRET.as_bytes().to_vec());
+    println!("write secret {:?} to entry {service}:{account}", "test");
+    let mut flow = WriteEntryFlow::new(b"test".to_vec(), encryption.clone());
     while let Some(io) = flow.next() {
         match io {
             dbus::Io::Crypto(crypto::Io::Encrypt) => {
@@ -40,7 +50,7 @@ async fn main() {
         }
     }
 
-    let mut flow = ReadEntryFlow::new();
+    let mut flow = ReadEntryFlow::new(encryption);
     while let Some(io) = flow.next() {
         match io {
             dbus::Io::Entry(Io::Read) => {
@@ -56,5 +66,5 @@ async fn main() {
     let secret = flow.secret.take().unwrap();
     let secret = secret.expose_secret();
     let secret = String::from_utf8_lossy(&secret);
-    println!("read secret {secret:?} from entry {SERVICE}:{ACCOUNT}");
+    println!("read secret {secret:?} from entry {service}:{account}");
 }

@@ -2,7 +2,7 @@ use secrecy::SecretSlice;
 
 use crate::secret_service::dbus::crypto;
 
-use super::Io;
+use super::{crypto::Algorithm, Io};
 
 pub trait Flow {
     fn take_secret(&mut self) -> Option<SecretSlice<u8>>;
@@ -20,14 +20,16 @@ pub enum ReadEntryState {
 
 #[derive(Clone, Debug)]
 pub struct ReadEntryFlow {
+    encryption: Algorithm,
     state: Option<ReadEntryState>,
     pub secret: Option<SecretSlice<u8>>,
     pub salt: Option<Vec<u8>>,
 }
 
 impl ReadEntryFlow {
-    pub fn new() -> Self {
+    pub fn new(encryption: Algorithm) -> Self {
         Self {
+            encryption,
             state: Some(ReadEntryState::Read),
             secret: None,
             salt: None,
@@ -41,7 +43,9 @@ impl Iterator for ReadEntryFlow {
     fn next(&mut self) -> Option<Self::Item> {
         match self.state.take()? {
             ReadEntryState::Read => {
-                self.state.replace(ReadEntryState::Decrypt);
+                if let Algorithm::Dh = self.encryption {
+                    self.state.replace(ReadEntryState::Decrypt);
+                }
                 Some(Io::Entry(crate::Io::Read))
             }
             ReadEntryState::Decrypt => Some(Io::Crypto(crypto::Io::Decrypt)),
@@ -99,9 +103,12 @@ pub struct WriteEntryFlow {
 }
 
 impl WriteEntryFlow {
-    pub fn new(secret: impl Into<SecretSlice<u8>>) -> Self {
+    pub fn new(secret: impl Into<SecretSlice<u8>>, encryption: Algorithm) -> Self {
         Self {
-            state: Some(WriteEntryState::Encrypt),
+            state: Some(match encryption {
+                Algorithm::Plain => WriteEntryState::Write,
+                Algorithm::Dh => WriteEntryState::Encrypt,
+            }),
             secret: Some(secret.into()),
             salt: None,
         }

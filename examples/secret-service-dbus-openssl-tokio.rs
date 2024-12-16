@@ -1,5 +1,5 @@
 #![cfg(target_os = "linux")]
-#![cfg(feature = "secret-service-dbus-std")]
+#![cfg(feature = "secret-service-dbus-tokio")]
 #![cfg(feature = "secret-service-dbus-openssl-std")]
 
 use std::env;
@@ -7,15 +7,16 @@ use std::env;
 use keyring::{
     secret_service::dbus::{
         self,
-        blocking::std::IoConnector as DbusIoConnector,
-        crypto::{self, algorithm::Algorithm, openssl::std::IoConnector as CryptoIoConnector},
+        crypto::{self, openssl::std::IoConnector as CryptoIoConnector, Algorithm},
         flow::{ReadEntryFlow, WriteEntryFlow},
+        nonblock::tokio::IoConnector as DbusIoConnector,
     },
     Io,
 };
 use secrecy::ExposeSecret;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let service = env::var("SERVICE").unwrap_or(String::from("test-service"));
     println!("using service name: {service:?}");
 
@@ -28,7 +29,9 @@ fn main() {
     };
     println!("using encryption algorithm: {encryption:?}");
 
-    let mut dbus = DbusIoConnector::new(&service, &account, encryption.clone()).unwrap();
+    let mut dbus = DbusIoConnector::new(&service, &account, encryption.clone())
+        .await
+        .unwrap();
     let mut crypto = CryptoIoConnector::new(dbus.session()).unwrap();
 
     println!("write secret {:?} to entry {service}:{account}", "test");
@@ -39,7 +42,7 @@ fn main() {
                 crypto.encrypt(&mut flow).unwrap();
             }
             dbus::Io::Entry(Io::Write) => {
-                dbus.write(&mut flow).unwrap();
+                dbus.write(&mut flow).await.unwrap();
             }
             _ => {
                 unreachable!();
@@ -51,7 +54,7 @@ fn main() {
     while let Some(io) = flow.next() {
         match io {
             dbus::Io::Entry(Io::Read) => {
-                dbus.read(&mut flow).unwrap();
+                dbus.read(&mut flow).await.unwrap();
             }
             dbus::Io::Crypto(crypto::Io::Decrypt) => {
                 crypto.decrypt(&mut flow).unwrap();
