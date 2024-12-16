@@ -8,10 +8,11 @@ use dbus::{
 use secrecy::{ExposeSecret, SecretSlice};
 use thiserror::Error;
 
-use crate::secret_service::dbus::{
+use crate::secret_service::{
     common::{DBUS_DEST, DBUS_PATH, DEFAULT_TIMEOUT, ITEM_ATTRIBUTES, ITEM_LABEL},
     crypto::{self, common::Keypair, Algorithm},
-    Flow, Session,
+    dbus::Session,
+    Flow,
 };
 
 use super::api::{

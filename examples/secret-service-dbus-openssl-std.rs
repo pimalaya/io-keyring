@@ -5,10 +5,10 @@
 use std::env;
 
 use keyring::{
-    secret_service::dbus::{
+    secret_service::{
         self,
-        blocking::std::IoConnector as DbusIoConnector,
         crypto::{self, algorithm::Algorithm, openssl::std::IoConnector as CryptoIoConnector},
+        dbus::blocking::std::IoConnector as DbusIoConnector,
         flow::{ReadEntryFlow, WriteEntryFlow},
     },
     Io,
@@ -35,10 +35,10 @@ fn main() {
     let mut flow = WriteEntryFlow::new(b"test".to_vec(), encryption.clone());
     while let Some(io) = flow.next() {
         match io {
-            dbus::Io::Crypto(crypto::Io::Encrypt) => {
+            secret_service::Io::Crypto(crypto::Io::Encrypt) => {
                 crypto.encrypt(&mut flow).unwrap();
             }
-            dbus::Io::Entry(Io::Write) => {
+            secret_service::Io::Entry(Io::Write) => {
                 dbus.write(&mut flow).unwrap();
             }
             _ => {
@@ -50,10 +50,10 @@ fn main() {
     let mut flow = ReadEntryFlow::new(encryption);
     while let Some(io) = flow.next() {
         match io {
-            dbus::Io::Entry(Io::Read) => {
+            secret_service::Io::Entry(Io::Read) => {
                 dbus.read(&mut flow).unwrap();
             }
-            dbus::Io::Crypto(crypto::Io::Decrypt) => {
+            secret_service::Io::Crypto(crypto::Io::Decrypt) => {
                 crypto.decrypt(&mut flow).unwrap();
             }
             _ => unreachable!(),

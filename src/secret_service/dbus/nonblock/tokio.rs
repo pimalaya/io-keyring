@@ -11,10 +11,11 @@ use thiserror::Error;
 use tokio::task::{JoinError, JoinHandle};
 use tracing::error;
 
-use crate::secret_service::dbus::{
+use crate::secret_service::{
     common::{DBUS_DEST, DBUS_PATH, DEFAULT_TIMEOUT, ITEM_ATTRIBUTES, ITEM_LABEL},
     crypto::{self, common::Keypair, Algorithm},
-    Flow, Session,
+    dbus::Session,
+    Flow,
 };
 
 use super::api::{

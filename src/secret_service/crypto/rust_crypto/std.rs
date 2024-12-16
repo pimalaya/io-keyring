@@ -10,12 +10,12 @@ use rand::{rngs::OsRng, Rng};
 use secrecy::ExposeSecret;
 use sha2::Sha256;
 
-use crate::secret_service::dbus::{
+use crate::secret_service::{
     crypto::{
         common::{prepare_derive_shared, AesKey},
         Algorithm, Error, Flow,
     },
-    Session,
+    dbus::Session,
 };
 
 #[derive(Clone, Debug, Default)]

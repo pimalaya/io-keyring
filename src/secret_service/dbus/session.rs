@@ -3,7 +3,7 @@ use std::fmt;
 use dbus::{arg::RefArg, Path};
 use num::BigUint;
 
-use super::crypto::{common::Keypair, Algorithm};
+use crate::secret_service::crypto::{common::Keypair, Algorithm};
 
 pub struct Session {
     encryption: Algorithm,

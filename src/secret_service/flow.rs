@@ -1,8 +1,8 @@
 use secrecy::SecretSlice;
 
-use crate::secret_service::dbus::crypto;
+use crate::secret_service::crypto::{self, Algorithm};
 
-use super::{crypto::Algorithm, Io};
+use super::Io;
 
 pub trait Flow {
     fn take_secret(&mut self) -> Option<SecretSlice<u8>>;

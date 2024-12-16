@@ -6,13 +6,13 @@ use openssl::{
 use rand::{rngs::OsRng, Rng};
 use secrecy::ExposeSecret;
 
-use crate::secret_service::dbus::{
+use crate::secret_service::{
     crypto::{
         algorithm::Algorithm,
         common::{prepare_derive_shared, AesKey},
         Error, Flow,
     },
-    Session,
+    dbus::Session,
 };
 
 #[derive(Clone, Debug, Default)]
