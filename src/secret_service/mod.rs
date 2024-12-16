@@ -1,2 +1,2 @@
-#[cfg(feature = "ss-dbus-std")]
+#[cfg(feature = "secret-service-dbus-std")]
 pub mod dbus_blocking;

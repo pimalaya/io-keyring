@@ -1,13 +1,17 @@
+use aes::cipher::{
+    block_padding::Pkcs7, generic_array::GenericArray, BlockDecryptMut, BlockEncryptMut, KeyIvInit,
+};
+use block_padding::UnpadError;
+use cbc::{Decryptor, Encryptor};
 use dbus::{
     arg::{cast, RefArg, Variant},
     blocking::Connection,
     Path,
 };
-use openssl::{
-    cipher::Cipher, cipher_ctx::CipherCtx, error::ErrorStack, md::Md, pkey::Id, pkey_ctx::PkeyCtx,
-};
+use hkdf::{Hkdf, InvalidLength};
 use rand::{rngs::OsRng, Rng};
 use secrecy::ExposeSecret;
+use sha2::Sha256;
 
 use crate::secret_service::dbus_blocking::{
     self,
@@ -27,10 +31,7 @@ pub struct IoConnector {
 }
 
 impl IoConnector {
-    pub fn new(
-        connection: &Connection,
-        encryption: Algorithm,
-    ) -> Result<Self, dbus_blocking::std::Error> {
+    pub fn new(connection: &Connection, encryption: Algorithm) -> dbus_blocking::std::Result<Self> {
         let proxy = connection.with_proxy(DBUS_DEST, DBUS_PATH, TIMEOUT);
         let processor = match encryption {
             Algorithm::Plain => {
@@ -59,7 +60,7 @@ impl IoConnector {
                 };
 
                 let shared_key = derive_shared(&keypair, server_public_key_bytes)
-                    .map_err(Error::DeriveSharedKeyOpensslError)?;
+                    .map_err(Error::DeriveSharedKeyRustCryptoError)?;
 
                 Self {
                     encryption,
@@ -77,9 +78,9 @@ impl IoConnector {
             .take_secret()
             .ok_or(Error::EncryptUndefinedSecretError)?;
         let secret = secret.expose_secret();
-        let key = &self.shared_key.unwrap();
+        let key = self.shared_key.ok_or(Error::EncryptSecretMissingKeyError)?;
 
-        let (secret, salt) = encrypt(secret, key).map_err(Error::EncryptSecretOpensslError)?;
+        let (secret, salt) = encrypt(secret, &key);
         flow.give_secret(secret.into());
         flow.give_salt(salt);
 
@@ -91,58 +92,47 @@ impl IoConnector {
             .take_secret()
             .ok_or(Error::DecryptUndefinedSecretError)?;
         let secret = secret.expose_secret();
+        let key = self.shared_key.ok_or(Error::DecryptSecretMissingKeyError)?;
         let salt = flow.take_salt().unwrap_or_default();
-        let key = &self.shared_key.unwrap();
 
-        let secret = decrypt(secret, key, &salt).map_err(Error::DecryptSecretOpensslError)?;
+        let secret = decrypt(secret, &key, &salt).map_err(Error::DecryptSecretRustCryptoError)?;
         flow.give_secret(secret.into());
 
         Ok(())
     }
 }
 
-fn encrypt(data: &[u8], key: &AesKey) -> Result<(Vec<u8>, Vec<u8>), ErrorStack> {
+fn encrypt(data: &[u8], key: &AesKey) -> (Vec<u8>, Vec<u8>) {
     // create the salt for the encryption
-    let mut aes_iv = [0u8; 16];
+    let mut aes_iv = [0; 16];
     OsRng.fill(&mut aes_iv);
+    let salt = aes_iv.to_vec();
 
-    let mut ctx = CipherCtx::new()?;
-    ctx.encrypt_init(Some(Cipher::aes_128_cbc()), Some(key), Some(&aes_iv))?;
+    // convert key and salt to input parameter form
+    let key = GenericArray::from_slice(key);
+    let iv = GenericArray::from_slice(&aes_iv);
+    let encryptor = Encryptor::<aes::Aes128>::new(key, iv);
+    let encrypted_data = encryptor.encrypt_padded_vec_mut::<Pkcs7>(data);
 
-    let mut output = vec![];
-    ctx.cipher_update_vec(data, &mut output)?;
-    ctx.cipher_final_vec(&mut output)?;
-
-    Ok((output, aes_iv.to_vec()))
+    (encrypted_data, salt)
 }
 
-fn decrypt(encrypted_data: &[u8], key: &AesKey, iv: &[u8]) -> Result<Vec<u8>, ErrorStack> {
-    let mut ctx = CipherCtx::new()?;
-    ctx.decrypt_init(Some(Cipher::aes_128_cbc()), Some(key), Some(iv))?;
-
-    let mut output = vec![];
-    ctx.cipher_update_vec(encrypted_data, &mut output)?;
-    ctx.cipher_final_vec(&mut output)?;
-    Ok(output)
+fn decrypt(encrypted_data: &[u8], key: &AesKey, iv: &[u8]) -> Result<Vec<u8>, UnpadError> {
+    let key = GenericArray::from_slice(key);
+    let iv = GenericArray::from_slice(iv);
+    let decryptor: Decryptor<aes::Aes128> = Decryptor::new(key, iv);
+    decryptor.decrypt_padded_vec_mut::<Pkcs7>(encrypted_data)
 }
 
-fn hkdf(ikm: Vec<u8>, salt: Option<&[u8]>, okm: &mut [u8]) -> Result<(), ErrorStack> {
-    let mut ctx = PkeyCtx::new_id(Id::HKDF)?;
-    ctx.derive_init()?;
-    ctx.set_hkdf_md(Md::sha256())?;
-    ctx.set_hkdf_key(&ikm)?;
-
-    if let Some(salt) = salt {
-        ctx.set_hkdf_salt(salt)?;
-    }
-
-    ctx.add_hkdf_info(&[]).unwrap();
-    ctx.derive(Some(okm))?;
-
-    Ok(())
+fn hkdf(ikm: Vec<u8>, salt: Option<&[u8]>, okm: &mut [u8]) -> Result<(), InvalidLength> {
+    let (_, hk) = Hkdf::<Sha256>::extract(salt, &ikm);
+    hk.expand(&[], okm)
 }
 
-fn derive_shared(keypair: &Keypair, server_public_key_bytes: &[u8]) -> Result<AesKey, ErrorStack> {
+fn derive_shared(
+    keypair: &Keypair,
+    server_public_key_bytes: &[u8],
+) -> Result<AesKey, InvalidLength> {
     let (ikm, mut okm) = prepare_derive_shared(keypair, server_public_key_bytes);
     hkdf(ikm, None, &mut okm)?;
     Ok(okm)

@@ -1,6 +1,6 @@
 #![cfg(target_os = "linux")]
-#![cfg(feature = "ss-dbus-std")]
-#![cfg(feature = "ss-dbus-std")]
+#![cfg(feature = "secret-service-dbus-std")]
+#![cfg(feature = "secret-service-dbus-rust-crypto-std")]
 
 use keyring::{
     secret_service::dbus_blocking::{
@@ -18,9 +18,11 @@ fn main() {
     const SECRET: &str = "test";
 
     let mut entry = dbus_blocking::std::IoConnector::new(SERVICE, ACCOUNT).unwrap();
-    let mut crypto =
-        dbus_blocking::crypto::openssl::std::IoConnector::new(entry.connection(), Algorithm::Dh)
-            .unwrap();
+    let mut crypto = dbus_blocking::crypto::rust_crypto::std::IoConnector::new(
+        entry.connection(),
+        Algorithm::Dh,
+    )
+    .unwrap();
 
     println!("write secret {SECRET:?} to entry {SERVICE}:{ACCOUNT}");
     let mut flow = WriteEntryFlow::new(crypto.session_path.clone(), SECRET.as_bytes().to_vec());

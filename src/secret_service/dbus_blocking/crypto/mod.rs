@@ -1,7 +1,15 @@
 pub mod algorithm;
-mod flow;
-mod io;
-#[cfg(feature = "ss-dbus-openssl-std")]
+pub mod common;
+pub mod error;
+pub mod flow;
+pub mod io;
+#[cfg(feature = "secret-service-dbus-openssl-std")]
 pub mod openssl;
+#[cfg(feature = "secret-service-dbus-rust-crypto-std")]
+pub mod rust_crypto;
 
-pub use self::{flow::Flow, io::Io};
+pub use self::{
+    error::{Error, Result},
+    flow::Flow,
+    io::Io,
+};

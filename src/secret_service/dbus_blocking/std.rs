@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use super::{
     api::{OrgFreedesktopSecretCollection, OrgFreedesktopSecretItem, OrgFreedesktopSecretService},
-    Flow, DBUS_DEST, DBUS_PATH, ITEM_ATTRIBUTES, ITEM_LABEL, TIMEOUT,
+    crypto, Flow, DBUS_DEST, DBUS_PATH, ITEM_ATTRIBUTES, ITEM_LABEL, TIMEOUT,
 };
 
 #[derive(Debug, Error)]
@@ -37,20 +37,13 @@ pub enum Error {
     GetSecretError(#[source] dbus::Error),
     #[error("cannot delete item from Secret Service using D-Bus")]
     DeleteItemError(#[source] dbus::Error),
-    #[error("cannot cast server public key to bytes using OpenSSL")]
+    #[error("cannot cast server public key to bytes")]
     CastServerPublicKeyToBytesError,
-    #[error("cannot derive shared key using OpenSSL")]
-    DeriveSharedKeyError(#[source] openssl::error::ErrorStack),
-    #[error("cannot encrypt secret using OpenSSL")]
-    EncryptSecretError(#[source] openssl::error::ErrorStack),
-    #[error("cannot encrypt empty secret using OpenSSL")]
-    EncryptSecretEmptyError,
-    #[error("cannot decrypt secret using OpenSSL")]
-    DecryptSecretError(#[source] openssl::error::ErrorStack),
-    #[error("cannot decrypt empty secret using OpenSSL")]
-    DecryptSecretEmptyError,
     #[error("cannot write empty secret into Secret Service entry using D-Bus")]
     WriteEmptySecretError,
+
+    #[error(transparent)]
+    CryptoError(#[from] crypto::Error),
 }
 
 pub type Result<T> = ::std::result::Result<T, Error>;

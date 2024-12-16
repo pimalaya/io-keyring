@@ -11,8 +11,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            features: ss-dbus-std,ss-dbus-openssl-std
-            example: ss-dbus-openssl-std
+            features: secret-service-dbus-std,secret-service-dbus-openssl-std
+            example: secret-service-dbus-openssl-std
+          - os: ubuntu-latest
+            features: secret-service-dbus-std,secret-service-dbus-rust-crypto-std
+            example: secret-service-dbus-rust-crypto-std
           - os: macos-13
             features: apple-native-std
             example: apple-native-std

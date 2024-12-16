@@ -4,7 +4,7 @@ pub mod api;
 pub mod crypto;
 pub mod flow;
 pub mod io;
-#[cfg(feature = "ss-dbus-std")]
+#[cfg(feature = "secret-service-dbus-std")]
 pub mod std;
 
 pub use self::{flow::Flow, io::Io};

@@ -1,9 +1,9 @@
 fn main() {
-    #[cfg(feature = "ss-dbus-std")]
+    #[cfg(feature = "secret-service-dbus-std")]
     generate_dbus_apis();
 }
 
-#[cfg(feature = "ss-dbus-std")]
+#[cfg(feature = "secret-service-dbus-std")]
 fn generate_dbus_apis() {
     let _ = std::fs::remove_file("./src/secret_service/dbus_blocking/api.rs");
 
@@ -12,11 +12,11 @@ fn generate_dbus_apis() {
     let mut opts = dbus_codegen::GenOpts::default();
     opts.methodtype = None;
 
-    #[cfg(feature = "ss-dbus-std")]
+    #[cfg(feature = "secret-service-dbus-std")]
     generate_dbus_blocking_api(xml, &mut opts);
 }
 
-#[cfg(feature = "ss-dbus-std")]
+#[cfg(feature = "secret-service-dbus-std")]
 fn generate_dbus_blocking_api(xml: &str, opts: &mut dbus_codegen::GenOpts) {
     opts.connectiontype = dbus_codegen::ConnectionType::Blocking;
 
