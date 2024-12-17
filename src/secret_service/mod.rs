@@ -9,6 +9,7 @@ pub mod flow;
 pub mod io;
 pub mod session;
 #[cfg(any(
+    feature = "secret-service-zbus-std",
     feature = "secret-service-zbus-async-std",
     feature = "secret-service-zbus-tokio",
 ))]

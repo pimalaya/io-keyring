@@ -2,6 +2,8 @@ pub mod api;
 #[cfg(feature = "secret-service-zbus-async-std")]
 pub mod async_std;
 pub mod session;
+#[cfg(feature = "secret-service-zbus-std")]
+pub mod std;
 #[cfg(feature = "secret-service-zbus-tokio")]
 pub mod tokio;
 

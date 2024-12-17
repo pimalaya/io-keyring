@@ -3,11 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Type, Value};
 
-#[zbus::proxy(
-    interface = "org.freedesktop.Secret.Service",
-    default_service = "org.freedesktop.secrets",
-    default_path = "/org/freedesktop/secrets"
-)]
+#[zbus::proxy(interface = "org.freedesktop.Secret.Service")]
 pub trait OrgFreedesktopSecretService {
     fn open_session(&self, algorithm: &str, input: Value<'_>) -> zbus::Result<OpenSessionResult>;
     fn create_collection(
@@ -29,10 +25,7 @@ pub trait OrgFreedesktopSecretService {
     fn collections(&self) -> zbus::fdo::Result<Vec<ObjectPath<'_>>>;
 }
 
-#[zbus::proxy(
-    interface = "org.freedesktop.Secret.Collection",
-    default_service = "org.freedesktop.Secret.Collection"
-)]
+#[zbus::proxy(interface = "org.freedesktop.Secret.Collection")]
 pub trait OrgFreedesktopSecretCollection {
     fn delete(&self) -> zbus::Result<OwnedObjectPath>;
     fn search_items(&self, attributes: HashMap<&str, &str>) -> zbus::Result<Vec<OwnedObjectPath>>;
@@ -57,10 +50,7 @@ pub trait OrgFreedesktopSecretCollection {
     fn modified(&self) -> zbus::fdo::Result<u64>;
 }
 
-#[zbus::proxy(
-    interface = "org.freedesktop.Secret.Item",
-    default_service = "org.freedesktop.Secret.Item"
-)]
+#[zbus::proxy(interface = "org.freedesktop.Secret.Item")]
 pub trait OrgFreedesktopSecretItem {
     fn delete(&self) -> zbus::Result<OwnedObjectPath>;
     fn get_secret(&self, session: &ObjectPath<'_>) -> zbus::Result<SecretStruct>;
@@ -82,10 +72,7 @@ pub trait OrgFreedesktopSecretItem {
     fn modified(&self) -> zbus::fdo::Result<u64>;
 }
 
-#[zbus::proxy(
-    interface = "org.freedesktop.Secret.Prompt",
-    default_service = "org.freedesktop.Secret.Prompt"
-)]
+#[zbus::proxy(interface = "org.freedesktop.Secret.Prompt")]
 pub trait OrgFreedesktopSecretPrompt {
     fn prompt(&self, window_id: &str) -> zbus::Result<()>;
     fn dismiss(&self) -> zbus::Result<()>;
