@@ -67,4 +67,6 @@ async fn main() {
     let secret = secret.expose_secret();
     let secret = String::from_utf8_lossy(&secret);
     println!("read secret {secret:?} from entry {service}:{account}");
+
+    dbus.disconnect().await.unwrap();
 }

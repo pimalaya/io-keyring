@@ -1,5 +1,5 @@
 #![cfg(target_os = "linux")]
-#![cfg(feature = "secret-service-dbus-tokio")]
+#![cfg(feature = "secret-service-zbus-tokio")]
 #![cfg(feature = "secret-service-rust-crypto-std")]
 
 use std::env;
@@ -7,9 +7,9 @@ use std::env;
 use keyring::{
     secret_service::{
         self,
-        crypto::{self, rust_crypto::std::IoConnector as CryptoIoConnector, Algorithm},
-        dbus::nonblock::tokio::IoConnector as DbusIoConnector,
+        crypto::{self, algorithm::Algorithm, rust_crypto::std::IoConnector as CryptoIoConnector},
         flow::{ReadEntryFlow, WriteEntryFlow},
+        zbus::tokio::IoConnector as ZbusIoConnector,
     },
     Io,
 };
@@ -29,10 +29,10 @@ async fn main() {
     };
     println!("using encryption algorithm: {encryption:?}");
 
-    let mut dbus = DbusIoConnector::new(&service, &account, encryption.clone())
+    let mut zbus = ZbusIoConnector::new(&service, &account, encryption.clone())
         .await
         .unwrap();
-    let mut crypto = CryptoIoConnector::new(dbus.session()).unwrap();
+    let mut crypto = CryptoIoConnector::new(zbus.session()).unwrap();
 
     println!("write secret {:?} to entry {service}:{account}", "test");
     let mut flow = WriteEntryFlow::new(b"test".to_vec(), encryption.clone());
@@ -42,7 +42,7 @@ async fn main() {
                 crypto.encrypt(&mut flow).unwrap();
             }
             secret_service::Io::Entry(Io::Write) => {
-                dbus.write(&mut flow).await.unwrap();
+                zbus.write(&mut flow).await.unwrap();
             }
             _ => {
                 unreachable!();
@@ -54,7 +54,7 @@ async fn main() {
     while let Some(io) = flow.next() {
         match io {
             secret_service::Io::Entry(Io::Read) => {
-                dbus.read(&mut flow).await.unwrap();
+                zbus.read(&mut flow).await.unwrap();
             }
             secret_service::Io::Crypto(crypto::Io::Decrypt) => {
                 crypto.decrypt(&mut flow).unwrap();
@@ -67,6 +67,4 @@ async fn main() {
     let secret = secret.expose_secret();
     let secret = String::from_utf8_lossy(&secret);
     println!("read secret {secret:?} from entry {service}:{account}");
-
-    dbus.disconnect().await.unwrap();
 }

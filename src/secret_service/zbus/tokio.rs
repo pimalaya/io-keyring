@@ -1,8 +1,8 @@
 use std::{collections::HashMap, fmt};
 
-use async_std::task::{spawn, JoinHandle};
 use secrecy::{ExposeSecret, SecretSlice};
 use thiserror::Error;
+use tokio::task::{spawn, JoinError, JoinHandle};
 use tracing::error;
 use zbus::{
     connection,
@@ -76,6 +76,8 @@ pub enum Error {
     #[error("cannot write empty secret into Secret Service entry using Z-Bus")]
     WriteEmptySecretError,
 
+    #[error(transparent)]
+    TokioJoinError(#[from] JoinError),
     #[error(transparent)]
     CryptoError(#[from] crypto::Error),
 }
@@ -209,8 +211,9 @@ impl SecretService {
         }
     }
 
-    pub async fn disconnect(self) {
-        self.handle.cancel().await;
+    pub async fn disconnect(self) -> Result<()> {
+        self.handle.abort();
+        Ok(self.handle.await?)
     }
 }
 
@@ -421,7 +424,7 @@ impl IoConnector {
         Ok(())
     }
 
-    pub async fn disconnect(self) {
-        self.service.disconnect().await;
+    pub async fn disconnect(self) -> Result<()> {
+        self.service.disconnect().await
     }
 }

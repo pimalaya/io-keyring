@@ -178,6 +178,11 @@ impl SecretService {
             }
         }
     }
+
+    pub async fn disconnect(self) -> Result<()> {
+        self.handle.abort();
+        Ok(self.handle.await?)
+    }
 }
 
 #[derive(Debug)]
@@ -312,9 +317,9 @@ impl<'a> Item<'a> {
 }
 
 pub struct IoConnector {
-    service: String,
-    account: String,
-    dbus: SecretService,
+    service_name: String,
+    account_name: String,
+    service: SecretService,
 }
 
 impl IoConnector {
@@ -324,22 +329,22 @@ impl IoConnector {
         encryption: Algorithm,
     ) -> Result<Self> {
         Ok(Self {
-            service: service.to_string(),
-            account: account.to_string(),
-            dbus: SecretService::connect(encryption).await?,
+            service_name: service.to_string(),
+            account_name: account.to_string(),
+            service: SecretService::connect(encryption).await?,
         })
     }
 
     pub fn session(&mut self) -> &mut Session {
-        &mut self.dbus.session
+        &mut self.service.session
     }
 
     pub async fn read(&mut self, flow: &mut impl Flow) -> Result<()> {
         let (_, salt, secret, _) = self
-            .dbus
+            .service
             .get_default_collection()
             .await?
-            .get_item(self.service.clone(), self.account.clone())
+            .get_item(self.service_name.clone(), self.account_name.clone())
             .await?
             .get_secret()
             .await?;
@@ -352,12 +357,21 @@ impl IoConnector {
         let secret = flow.take_secret().ok_or(Error::WriteEmptySecretError)?;
         let salt = flow.take_salt().unwrap_or_default();
 
-        self.dbus
+        self.service
             .get_default_collection()
             .await?
-            .create_item(self.service.clone(), self.account.clone(), secret, salt)
+            .create_item(
+                self.service_name.clone(),
+                self.account_name.clone(),
+                secret,
+                salt,
+            )
             .await?;
 
         Ok(())
+    }
+
+    pub async fn disconnect(self) -> Result<()> {
+        self.service.disconnect().await
     }
 }

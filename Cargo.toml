@@ -25,6 +25,7 @@ full = [
   "secret-service-dbus-tokio",
 
   "secret-service-zbus-async-std",
+  "secret-service-zbus-tokio",
 
   "secret-service-openssl-std",
   "secret-service-rust-crypto-std",
@@ -37,7 +38,8 @@ secret-service-dbus-tokio = ["dep:dbus-codegen", "dep:dbus-tokio", "dep:tokio"]
 
 # Linux Secret service, based on Z-Bus
 #
-secret-service-zbus-async-std = ["dep:serde", "dep:zbus", "serde/derive", "zbus/async-io"]
+secret-service-zbus-async-std = ["dep:async-std", "dep:serde", "dep:zbus", "serde/derive"]
+secret-service-zbus-tokio = ["dep:serde", "dep:tokio", "dep:zbus", "serde/derive"]
 
 # Linux Secret service crypto
 #
@@ -71,6 +73,7 @@ tracing = "0.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 aes = { version = "0.8", optional = true }
+async-std = { version = "1", default-features = false, optional = true }
 block-padding = { version = "0.3", features = ["std"], optional = true }
 cbc = { version = "0.1", features = ["block-padding", "alloc"], optional = true }
 dbus = { version = "0.9", optional = true }
@@ -82,7 +85,7 @@ openssl = { version = "0.10", optional = true }
 rand = { version = "0.8", optional = true }
 sha2 = { version = "0.10", optional = true }
 tokio = { version = "1", features = ["rt"], optional = true }
-zbus = { version = "5", default-features = false, optional = true }
+zbus = { version = "5", default-features = false, features = ["async-io"], optional = true }
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 security-framework = { version = "3", default-features = false, optional = true }
