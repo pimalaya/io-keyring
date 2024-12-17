@@ -21,6 +21,9 @@ name = "keyring"
 [features]
 default = []
 full = [
+  "apple-native-std",
+  "windows-native-std",
+
   "secret-service-dbus-std",
   "secret-service-dbus-tokio",
 
@@ -75,7 +78,7 @@ tracing = "0.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 aes = { version = "0.8", optional = true }
-async-std = { version = "1", default-features = false, optional = true }
+async-std = { version = "1", optional = true }
 block-padding = { version = "0.3", features = ["std"], optional = true }
 cbc = { version = "0.1", features = ["block-padding", "alloc"], optional = true }
 dbus = { version = "0.9", optional = true }

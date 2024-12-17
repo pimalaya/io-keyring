@@ -19,22 +19,29 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+#[derive(Clone, Debug, Default)]
 pub struct IoConnector;
 
 impl IoConnector {
-    pub fn read(flow: &mut impl Flow) -> Result<()> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn read(&self, flow: &mut impl Flow) -> Result<()> {
         let service = flow.get_service();
         let account = flow.get_account();
         let secret = get_generic_password(service, account).map_err(Error::ReadSecretError)?;
+
         flow.put_secret(secret.into());
         Ok(())
     }
 
-    pub fn write(flow: &mut impl Flow) -> Result<()> {
+    pub fn write(&self, flow: &mut impl Flow) -> Result<()> {
         let secret = flow.take_secret().ok_or(Error::WriteUndefinedSecretError)?;
         let service = flow.get_service();
         let account = flow.get_account();
         let secret = secret.expose_secret();
+
         set_generic_password(service, account, secret).map_err(Error::WriteSecretError)?;
         Ok(())
     }
