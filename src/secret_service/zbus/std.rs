@@ -9,10 +9,12 @@ use zbus::{
     zvariant::{OwnedObjectPath, Value},
 };
 
-use crate::secret_service::{
-    common::{DBUS_DEST, DBUS_PATH, ITEM_ATTRIBUTES, ITEM_LABEL},
-    crypto::{self, common::Keypair, Algorithm},
-    Flow,
+use crate::{
+    secret_service::{
+        common::{DBUS_DEST, DBUS_PATH, ITEM_ATTRIBUTES, ITEM_LABEL},
+        crypto::{self, common::Keypair, Algorithm, PutSalt, TakeSalt},
+    },
+    Flow, PutSecret, TakeSecret,
 };
 
 use super::{
@@ -319,19 +321,13 @@ impl<'a> Item<'a> {
 
 pub struct IoConnector {
     service_name: String,
-    account_name: String,
     service: SecretService,
 }
 
 impl IoConnector {
-    pub fn new(
-        service: impl ToString,
-        account: impl ToString,
-        encryption: Algorithm,
-    ) -> Result<Self> {
+    pub fn new(service: impl ToString, encryption: Algorithm) -> Result<Self> {
         Ok(Self {
             service_name: service.to_string(),
-            account_name: account.to_string(),
             service: SecretService::connect(encryption)?,
         })
     }
@@ -340,7 +336,7 @@ impl IoConnector {
         &mut self.service.session
     }
 
-    pub fn read(&mut self, flow: &mut impl Flow) -> Result<()> {
+    pub fn read<F: PutSecret + PutSalt>(&mut self, flow: &mut F) -> Result<()> {
         let SecretStruct {
             parameters: salt,
             value: secret,
@@ -348,25 +344,34 @@ impl IoConnector {
         } = self
             .service
             .get_default_collection()?
-            .get_item(self.service_name.clone(), self.account_name.clone())?
+            .get_item(&self.service_name, flow.key())?
             .get_secret()?;
 
-        flow.give_secret(secret.into());
-        flow.give_salt(salt);
+        flow.put_secret(secret.into());
+        flow.put_salt(salt);
 
         Ok(())
     }
 
-    pub fn write(&mut self, flow: &mut impl Flow) -> Result<()> {
+    pub fn write<F: TakeSecret + TakeSalt>(&mut self, flow: &mut F) -> Result<()> {
         let secret = flow.take_secret().ok_or(Error::WriteEmptySecretError)?;
         let salt = flow.take_salt().unwrap_or_default();
 
         self.service.get_default_collection()?.create_item(
-            self.service_name.clone(),
-            self.account_name.clone(),
+            &self.service_name,
+            flow.key(),
             secret,
             salt,
         )?;
+
+        Ok(())
+    }
+
+    pub fn delete<F: Flow>(&mut self, flow: &mut F) -> Result<()> {
+        self.service
+            .get_default_collection()?
+            .get_item(&self.service_name, flow.key())?
+            .delete()?;
 
         Ok(())
     }

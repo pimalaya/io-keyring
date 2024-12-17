@@ -8,11 +8,13 @@ use dbus::{
 use secrecy::{ExposeSecret, SecretSlice};
 use thiserror::Error;
 
-use crate::secret_service::{
-    common::{DBUS_DEST, DBUS_PATH, DEFAULT_TIMEOUT, ITEM_ATTRIBUTES, ITEM_LABEL},
-    crypto::{self, common::Keypair, Algorithm},
-    dbus::Session,
-    Flow,
+use crate::{
+    secret_service::{
+        common::{DBUS_DEST, DBUS_PATH, DEFAULT_TIMEOUT, ITEM_ATTRIBUTES, ITEM_LABEL},
+        crypto::{self, common::Keypair, Algorithm, PutSalt, TakeSalt},
+        dbus::Session,
+    },
+    Flow, PutSecret, TakeSecret,
 };
 
 use super::api::{
@@ -278,19 +280,13 @@ impl<'a> Item<'a> {
 #[derive(Debug)]
 pub struct IoConnector {
     service: String,
-    account: String,
     dbus: SecretService,
 }
 
 impl IoConnector {
-    pub fn new(
-        service: impl ToString,
-        account: impl ToString,
-        encryption: Algorithm,
-    ) -> Result<Self> {
+    pub fn new(service: impl ToString, encryption: Algorithm) -> Result<Self> {
         Ok(Self {
             service: service.to_string(),
-            account: account.to_string(),
             dbus: SecretService::connect(encryption)?,
         })
     }
@@ -299,27 +295,33 @@ impl IoConnector {
         &mut self.dbus.session
     }
 
-    pub fn read(&mut self, flow: &mut impl Flow) -> Result<()> {
+    pub fn read<F: PutSecret + PutSalt>(&mut self, flow: &mut F) -> Result<()> {
         let (_, salt, secret, _) = self
             .dbus
             .get_default_collection()?
-            .get_item(self.service.clone(), self.account.clone())?
+            .get_item(&self.service, flow.key())?
             .get_secret()?;
-        flow.give_secret(secret.into());
-        flow.give_salt(salt);
+        flow.put_secret(secret.into());
+        flow.put_salt(salt);
         Ok(())
     }
 
-    pub fn write(&mut self, flow: &mut impl Flow) -> Result<()> {
+    pub fn write<F: TakeSecret + TakeSalt>(&mut self, flow: &mut F) -> Result<()> {
         let secret = flow.take_secret().ok_or(Error::WriteEmptySecretError)?;
         let salt = flow.take_salt().unwrap_or_default();
 
-        self.dbus.get_default_collection()?.create_item(
-            self.service.clone(),
-            self.account.clone(),
-            secret,
-            salt,
-        )?;
+        self.dbus
+            .get_default_collection()?
+            .create_item(&self.service, flow.key(), secret, salt)?;
+
+        Ok(())
+    }
+
+    pub fn delete<F: Flow>(&mut self, flow: &mut F) -> Result<()> {
+        self.dbus
+            .get_default_collection()?
+            .get_item(&self.service, flow.key())?
+            .delete()?;
 
         Ok(())
     }

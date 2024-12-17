@@ -3,25 +3,27 @@ use secrecy::SecretSlice;
 use crate::Io;
 
 pub trait Flow {
-    fn get_service(&self) -> &str;
-    fn get_username(&self) -> &str;
+    fn key(&self) -> &str;
+}
 
+pub trait TakeSecret: Flow {
     fn take_secret(&mut self) -> Option<SecretSlice<u8>>;
+}
+
+pub trait PutSecret: Flow {
     fn put_secret(&mut self, secret: SecretSlice<u8>);
 }
 
 #[derive(Clone, Debug)]
 pub struct ReadEntryFlow {
-    service: String,
-    username: String,
+    key: String,
     secret: Option<SecretSlice<u8>>,
 }
 
 impl ReadEntryFlow {
-    pub fn new(service: impl ToString, username: impl ToString) -> Self {
+    pub fn new(key: impl ToString) -> Self {
         Self {
-            service: service.to_string(),
-            username: username.to_string(),
+            key: key.to_string(),
             secret: None,
         }
     }
@@ -40,18 +42,18 @@ impl Iterator for ReadEntryFlow {
 }
 
 impl Flow for ReadEntryFlow {
-    fn get_service(&self) -> &str {
-        self.service.as_str()
+    fn key(&self) -> &str {
+        self.key.as_str()
     }
+}
 
-    fn get_username(&self) -> &str {
-        self.username.as_str()
-    }
-
+impl TakeSecret for ReadEntryFlow {
     fn take_secret(&mut self) -> Option<SecretSlice<u8>> {
         self.secret.take()
     }
+}
 
+impl PutSecret for ReadEntryFlow {
     fn put_secret(&mut self, secret: SecretSlice<u8>) {
         self.secret.replace(secret);
     }
@@ -59,20 +61,14 @@ impl Flow for ReadEntryFlow {
 
 #[derive(Clone, Debug)]
 pub struct WriteEntryFlow {
-    service: String,
-    username: String,
+    key: String,
     secret: Option<SecretSlice<u8>>,
 }
 
 impl WriteEntryFlow {
-    pub fn new(
-        service: impl ToString,
-        username: impl ToString,
-        secret: impl Into<SecretSlice<u8>>,
-    ) -> Self {
+    pub fn new(key: impl ToString, secret: impl Into<SecretSlice<u8>>) -> Self {
         Self {
-            service: service.to_string(),
-            username: username.to_string(),
+            key: key.to_string(),
             secret: Some(secret.into()),
         }
     }
@@ -91,19 +87,46 @@ impl Iterator for WriteEntryFlow {
 }
 
 impl Flow for WriteEntryFlow {
-    fn get_service(&self) -> &str {
-        self.service.as_str()
+    fn key(&self) -> &str {
+        self.key.as_str()
     }
+}
 
-    fn get_username(&self) -> &str {
-        self.username.as_str()
-    }
-
+impl TakeSecret for WriteEntryFlow {
     fn take_secret(&mut self) -> Option<SecretSlice<u8>> {
         self.secret.take()
     }
+}
 
-    fn put_secret(&mut self, secret: SecretSlice<u8>) {
-        self.secret.replace(secret);
+#[derive(Clone, Debug)]
+pub struct DeleteEntryFlow {
+    key: String,
+    deleted: bool,
+}
+
+impl DeleteEntryFlow {
+    pub fn new(key: impl ToString) -> Self {
+        Self {
+            key: key.to_string(),
+            deleted: false,
+        }
+    }
+}
+
+impl Iterator for DeleteEntryFlow {
+    type Item = Io;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.deleted {
+            None
+        } else {
+            Some(Io::Delete)
+        }
+    }
+}
+
+impl Flow for DeleteEntryFlow {
+    fn key(&self) -> &str {
+        self.key.as_str()
     }
 }

@@ -35,31 +35,41 @@ full = [
   "secret-service-rust-crypto-std",
 ]
 
-# Linux Secret service, based on D-Bus
+## Linux Secret service
 #
-secret-service-dbus-std = ["dep:dbus", "dep:dbus-codegen"]
-secret-service-dbus-tokio = ["dep:dbus", "dep:dbus-codegen", "dep:dbus-tokio", "dep:tokio"]
-
-# Linux Secret service, based on Z-Bus
+secret-service = ["dep:num", "dep:once_cell", "dep:rand"]
 #
-secret-service-zbus-std = ["dep:serde", "dep:zbus", "serde/derive", "zbus?/blocking-api"]
-secret-service-zbus-async-std = ["dep:async-std", "dep:serde", "dep:zbus", "serde?/derive"]
-secret-service-zbus-tokio = ["dep:serde", "dep:tokio", "dep:zbus", "serde?/derive"]
-
-# Linux Secret service crypto
+# D-Bus implementation (requires libdbus)
 #
-secret-service-openssl-std = ["dep:num", "dep:openssl", "dep:once_cell", "dep:rand"]
-secret-service-rust-crypto-std = ["dep:aes", "dep:block-padding", "dep:cbc", "dep:hkdf", "dep:num", "dep:once_cell", "dep:rand", "dep:sha2"]
-
-# MacOS/iOS Keychain
+secret-service-dbus = ["dep:dbus", "secret-service"]
+secret-service-dbus-blocking = ["dep:dbus-codegen", "secret-service-dbus"]
+secret-service-dbus-nonblock = ["dep:dbus-codegen", "dbus/futures", "secret-service-dbus"]
+secret-service-dbus-std = ["secret-service-dbus-blocking"]
+secret-service-dbus-tokio = ["dep:dbus-tokio", "dep:tokio", "secret-service-dbus-nonblock"]
 #
-apple-native-std = ["dep:security-framework"]
-
-# Windows Credentials
+# Z-Bus implementation (pure Rust)
 #
-windows-native-std = ["dep:byteorder", "dep:windows-sys"]
+secret-service-zbus = ["dep:serde", "dep:zbus", "serde?/derive", "secret-service"]
+secret-service-zbus-std = ["zbus?/blocking-api", "secret-service-zbus"]
+secret-service-zbus-async-std = ["dep:async-std", "secret-service-zbus"]
+secret-service-zbus-tokio = ["dep:tokio", "secret-service-zbus"]
+#
+# Crypto (for encrypted sessions)
+#
+secret-service-openssl-std = ["dep:openssl"]
+secret-service-rust-crypto-std = ["dep:aes", "dep:block-padding", "dep:cbc", "dep:hkdf", "dep:sha2"]
 
-# Vendored
+## MacOS/iOS Keychain
+#
+apple-native = []
+apple-native-std = ["dep:security-framework", "apple-native"]
+
+## Windows Credentials
+#
+windows-native = []
+windows-native-std = ["dep:byteorder", "dep:windows-sys", "windows-native"]
+
+## Vendored
 #
 vendored = ["dbus?/vendored", "openssl?/vendored"]
 

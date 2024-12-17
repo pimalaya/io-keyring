@@ -1,11 +1,11 @@
 use secrecy::ExposeSecret;
 use security_framework::{
     base::Error as SecurityFrameworkError,
-    passwords::{get_generic_password, set_generic_password},
+    passwords::{delete_generic_password, get_generic_password, set_generic_password},
 };
 use thiserror::Error;
 
-use super::Flow;
+use crate::{Flow, PutSecret, TakeSecret};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -15,34 +15,42 @@ pub enum Error {
     WriteUndefinedSecretError,
     #[error("cannot write secret to OSX keychain")]
     WriteSecretError(#[source] SecurityFrameworkError),
+    #[error("cannot delete secret from OSX keychain")]
+    DeleteSecretError(#[source] SecurityFrameworkError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, Debug, Default)]
-pub struct IoConnector;
+#[derive(Clone, Debug)]
+pub struct IoConnector {
+    service: String,
+}
 
 impl IoConnector {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(service: impl ToString) -> Self {
+        Self {
+            service: service.to_string(),
+        }
     }
 
-    pub fn read(&self, flow: &mut impl Flow) -> Result<()> {
-        let service = flow.get_service();
-        let account = flow.get_account();
-        let secret = get_generic_password(service, account).map_err(Error::ReadSecretError)?;
-
+    pub fn read(&self, flow: &mut impl PutSecret) -> Result<()> {
+        let key = flow.key();
+        let secret = get_generic_password(&self.service, key).map_err(Error::ReadSecretError)?;
         flow.put_secret(secret.into());
         Ok(())
     }
 
-    pub fn write(&self, flow: &mut impl Flow) -> Result<()> {
+    pub fn write(&self, flow: &mut impl TakeSecret) -> Result<()> {
         let secret = flow.take_secret().ok_or(Error::WriteUndefinedSecretError)?;
-        let service = flow.get_service();
-        let account = flow.get_account();
+        let key = flow.key();
         let secret = secret.expose_secret();
+        set_generic_password(&self.service, key, secret).map_err(Error::WriteSecretError)?;
+        Ok(())
+    }
 
-        set_generic_password(service, account, secret).map_err(Error::WriteSecretError)?;
+    pub fn delete(&self, flow: &mut impl Flow) -> Result<()> {
+        let key = flow.key();
+        delete_generic_password(&self.service, key).map_err(Error::DeleteSecretError)?;
         Ok(())
     }
 }

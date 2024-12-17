@@ -11,6 +11,6 @@ pub mod rust_crypto;
 pub use self::{
     algorithm::Algorithm,
     error::{Error, Result},
-    flow::Flow,
+    flow::{PutSalt, TakeSalt},
     io::Io,
 };

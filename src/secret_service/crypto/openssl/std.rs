@@ -5,13 +5,16 @@ use openssl::{
 use rand::{rngs::OsRng, Rng};
 use secrecy::ExposeSecret;
 
-use crate::secret_service::{
-    crypto::{
-        algorithm::Algorithm,
-        common::{prepare_derive_shared, AesKey},
-        Error, Flow,
+use crate::{
+    secret_service::{
+        crypto::{
+            algorithm::Algorithm,
+            common::{prepare_derive_shared, AesKey},
+            Error, PutSalt, TakeSalt,
+        },
+        Session,
     },
-    Session,
+    PutSecret, TakeSecret,
 };
 
 #[derive(Clone, Debug)]
@@ -52,7 +55,10 @@ impl<P> IoConnector<P> {
         Ok(connector)
     }
 
-    pub fn encrypt(&mut self, flow: &mut impl Flow) -> Result<(), Error> {
+    pub fn encrypt<F: TakeSecret + PutSecret + PutSalt>(
+        &mut self,
+        flow: &mut F,
+    ) -> Result<(), Error> {
         let secret = flow
             .take_secret()
             .ok_or(Error::EncryptUndefinedSecretError)?;
@@ -60,13 +66,16 @@ impl<P> IoConnector<P> {
         let key = &self.shared_key.unwrap();
 
         let (secret, salt) = encrypt(secret, key).map_err(Error::EncryptSecretOpensslError)?;
-        flow.give_secret(secret.into());
-        flow.give_salt(salt);
+        flow.put_secret(secret.into());
+        flow.put_salt(salt);
 
         Ok(())
     }
 
-    pub fn decrypt(&mut self, flow: &mut impl Flow) -> Result<(), Error> {
+    pub fn decrypt<F: TakeSecret + PutSecret + TakeSalt>(
+        &mut self,
+        flow: &mut F,
+    ) -> Result<(), Error> {
         let secret = flow
             .take_secret()
             .ok_or(Error::DecryptUndefinedSecretError)?;
@@ -75,7 +84,7 @@ impl<P> IoConnector<P> {
         let key = &self.shared_key.unwrap();
 
         let secret = decrypt(secret, key, &salt).map_err(Error::DecryptSecretOpensslError)?;
-        flow.give_secret(secret.into());
+        flow.put_secret(secret.into());
 
         Ok(())
     }

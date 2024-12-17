@@ -1,9 +1,9 @@
-use secrecy::SecretSlice;
+use crate::{PutSecret, TakeSecret};
 
-pub trait Flow {
-    fn take_secret(&mut self) -> Option<SecretSlice<u8>>;
+pub trait TakeSalt: TakeSecret {
     fn take_salt(&mut self) -> Option<Vec<u8>>;
+}
 
-    fn give_secret(&mut self, secret: SecretSlice<u8>);
-    fn give_salt(&mut self, salt: Vec<u8>);
+pub trait PutSalt: PutSecret {
+    fn put_salt(&mut self, salt: Vec<u8>);
 }

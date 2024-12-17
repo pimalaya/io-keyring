@@ -1,6 +1,6 @@
-#[cfg(any(feature = "secret-service-dbus-std"))]
+#[cfg(feature = "secret-service-dbus-blocking")]
 pub mod blocking;
-#[cfg(any(feature = "secret-service-dbus-tokio"))]
+#[cfg(feature = "secret-service-dbus-nonblock")]
 pub mod nonblock;
 pub mod session;
 

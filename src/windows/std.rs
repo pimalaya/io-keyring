@@ -1,5 +1,4 @@
-use ::std::{collections::HashMap, iter::once, mem::MaybeUninit, str};
-use std::string::FromUtf16Error;
+use std::{collections::HashMap, iter::once, mem::MaybeUninit, str, string::FromUtf16Error};
 
 use byteorder::{ByteOrder, LittleEndian};
 use secrecy::{ExposeSecret, SecretSlice, SecretString};
@@ -17,7 +16,7 @@ use windows_sys::Win32::{
     },
 };
 
-use super::Flow;
+use crate::{Flow, PutSecret, TakeSecret};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -372,27 +371,35 @@ unsafe fn from_wstr(ws: *const u16) -> String {
     String::from_utf16_lossy(slice)
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct IoConnector;
+#[derive(Clone, Debug)]
+pub struct IoConnector {
+    service: String,
+}
 
 impl IoConnector {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(service: impl ToString) -> Self {
+        Self {
+            service: service.to_string(),
+        }
     }
 
-    pub fn read(&self, flow: &mut impl Flow) -> Result<()> {
-        let service = flow.get_service();
-        let username = flow.get_username();
-        let secret = WinCredential::try_new(service, username)?.get_secret_bytes()?;
+    pub fn read(&self, flow: &mut impl PutSecret) -> Result<()> {
+        let key = flow.key();
+        let secret = WinCredential::try_new(&self.service, key)?.get_secret_bytes()?;
         flow.put_secret(secret);
         Ok(())
     }
 
-    pub fn write(&self, flow: &mut impl Flow) -> Result<()> {
+    pub fn write(&self, flow: &mut impl TakeSecret) -> Result<()> {
         let secret = flow.take_secret().ok_or(Error::WriteUndefinedSecretError)?;
-        let service = flow.get_service();
-        let username = flow.get_username();
-        WinCredential::try_new(service, username)?.set_secret_bytes(secret)?;
+        let key = flow.key();
+        WinCredential::try_new(&self.service, key)?.set_secret_bytes(secret)?;
+        Ok(())
+    }
+
+    pub fn delete(&self, flow: &mut impl Flow) -> Result<()> {
+        let key = flow.key();
+        WinCredential::try_new(&self.service, key)?.delete_entry()?;
         Ok(())
     }
 }

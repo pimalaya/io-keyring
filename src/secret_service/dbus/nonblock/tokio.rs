@@ -11,11 +11,13 @@ use thiserror::Error;
 use tokio::task::{JoinError, JoinHandle};
 use tracing::error;
 
-use crate::secret_service::{
-    common::{DBUS_DEST, DBUS_PATH, DEFAULT_TIMEOUT, ITEM_ATTRIBUTES, ITEM_LABEL},
-    crypto::{self, common::Keypair, Algorithm},
-    dbus::Session,
-    Flow,
+use crate::{
+    secret_service::{
+        common::{DBUS_DEST, DBUS_PATH, DEFAULT_TIMEOUT, ITEM_ATTRIBUTES, ITEM_LABEL},
+        crypto::{self, common::Keypair, Algorithm, PutSalt, TakeSalt},
+        dbus::Session,
+    },
+    Flow, PutSecret, TakeSecret,
 };
 
 use super::api::{
@@ -319,19 +321,13 @@ impl<'a> Item<'a> {
 
 pub struct IoConnector {
     service_name: String,
-    account_name: String,
     service: SecretService,
 }
 
 impl IoConnector {
-    pub async fn new(
-        service: impl ToString,
-        account: impl ToString,
-        encryption: Algorithm,
-    ) -> Result<Self> {
+    pub async fn new(service: impl ToString, encryption: Algorithm) -> Result<Self> {
         Ok(Self {
             service_name: service.to_string(),
-            account_name: account.to_string(),
             service: SecretService::connect(encryption).await?,
         })
     }
@@ -340,33 +336,42 @@ impl IoConnector {
         &mut self.service.session
     }
 
-    pub async fn read(&mut self, flow: &mut impl Flow) -> Result<()> {
+    pub async fn read<F: PutSecret + PutSalt>(&mut self, flow: &mut F) -> Result<()> {
         let (_, salt, secret, _) = self
             .service
             .get_default_collection()
             .await?
-            .get_item(self.service_name.clone(), self.account_name.clone())
+            .get_item(&self.service_name, flow.key())
             .await?
             .get_secret()
             .await?;
-        flow.give_secret(secret.into());
-        flow.give_salt(salt);
+
+        flow.put_secret(secret.into());
+        flow.put_salt(salt);
+
         Ok(())
     }
 
-    pub async fn write(&mut self, flow: &mut impl Flow) -> Result<()> {
+    pub async fn write<F: TakeSecret + TakeSalt>(&mut self, flow: &mut F) -> Result<()> {
         let secret = flow.take_secret().ok_or(Error::WriteEmptySecretError)?;
         let salt = flow.take_salt().unwrap_or_default();
 
         self.service
             .get_default_collection()
             .await?
-            .create_item(
-                self.service_name.clone(),
-                self.account_name.clone(),
-                secret,
-                salt,
-            )
+            .create_item(&self.service_name, flow.key(), secret, salt)
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn delete<F: Flow>(&mut self, flow: &mut F) -> Result<()> {
+        self.service
+            .get_default_collection()
+            .await?
+            .get_item(&self.service_name, flow.key())
+            .await?
+            .delete()
             .await?;
 
         Ok(())

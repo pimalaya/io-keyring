@@ -8,10 +8,10 @@ use keyring::{
     secret_service::{
         self,
         crypto::{self, algorithm::Algorithm, openssl::std::IoConnector as CryptoIoConnector},
-        flow::{ReadEntryFlow, WriteEntryFlow},
+        flow::{DeleteEntryFlow, ReadEntryFlow, WriteEntryFlow},
         zbus::std::IoConnector as ZbusIoConnector,
     },
-    Io,
+    Io, TakeSecret,
 };
 use secrecy::ExposeSecret;
 
@@ -22,8 +22,8 @@ async fn main() {
     let service = env::var("SERVICE").unwrap_or(String::from("test-service"));
     println!("using service name: {service:?}");
 
-    let account = env::var("ACCOUNT").unwrap_or(String::from("test-account"));
-    println!("using account name: {service:?}");
+    let key = env::var("KEY").unwrap_or(String::from("test-key"));
+    println!("using entry key: {key:?}");
 
     let encryption = match env::var("ENCRYPTION") {
         Ok(alg) if alg.trim().eq_ignore_ascii_case("dh") => Algorithm::Dh,
@@ -31,11 +31,11 @@ async fn main() {
     };
     println!("using encryption algorithm: {encryption:?}");
 
-    let mut zbus = ZbusIoConnector::new(&service, &account, encryption.clone()).unwrap();
+    let mut zbus = ZbusIoConnector::new(&service, encryption.clone()).unwrap();
     let mut crypto = CryptoIoConnector::new(zbus.session()).unwrap();
 
-    println!("write secret {SECRET:?} to entry {service}:{account}");
-    let mut flow = WriteEntryFlow::new(SECRET.as_bytes().to_vec(), encryption.clone());
+    println!("write secret {SECRET:?} to entry {service}:{key}");
+    let mut flow = WriteEntryFlow::new(&key, SECRET.as_bytes().to_vec(), encryption.clone());
     while let Some(io) = flow.next() {
         match io {
             secret_service::Io::Crypto(crypto::Io::Encrypt) => {
@@ -50,7 +50,7 @@ async fn main() {
         }
     }
 
-    let mut flow = ReadEntryFlow::new(encryption);
+    let mut flow = ReadEntryFlow::new(&key, encryption);
     while let Some(io) = flow.next() {
         match io {
             secret_service::Io::Entry(Io::Read) => {
@@ -63,8 +63,19 @@ async fn main() {
         }
     }
 
-    let secret = flow.secret.take().unwrap();
+    let secret = flow.take_secret().unwrap();
     let secret = secret.expose_secret();
     let secret = String::from_utf8_lossy(&secret);
-    println!("read secret {secret:?} from entry {service}:{account}");
+    println!("read secret {secret:?} from entry {service}:{key}");
+
+    let mut flow = DeleteEntryFlow::new(&key);
+    while let Some(io) = flow.next() {
+        match io {
+            secret_service::Io::Entry(Io::Delete) => {
+                zbus.delete(&mut flow).unwrap();
+            }
+            _ => unreachable!(),
+        }
+    }
+    println!("delete secret from entry {service}:{key}");
 }
