@@ -10,12 +10,35 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Secret Service + D-Bus + std (blocking)
+
           - os: ubuntu-latest
-            features: secret-service-dbus-std,secret-service-dbus-openssl-std
-            example: secret-service-dbus-openssl-std
+            features: secret-service-dbus-std,secret-service-openssl-std
+            example: secret-service-openssl-std
           - os: ubuntu-latest
-            features: secret-service-dbus-std,secret-service-dbus-rust-crypto-std
-            example: secret-service-dbus-rust-crypto-std
+            features: secret-service-dbus-std,secret-service-rust-crypto-std
+            example: secret-service-rust-crypto-std
+
+          # Secret Service + D-Bus + tokio
+
+          - os: ubuntu-latest
+            features: secret-service-dbus-tokio,secret-service-openssl-std
+            example: secret-service-openssl-std
+          - os: ubuntu-latest
+            features: secret-service-dbus-tokio,secret-service-rust-crypto-std
+            example: secret-service-rust-crypto-std
+
+          # Secret Service + Z-Bus + async-std
+
+          - os: ubuntu-latest
+            features: secret-service-zbus-async-std,secret-service-openssl-std
+            example: secret-service-openssl-std
+          - os: ubuntu-latest
+            features: secret-service-zbus-async-std,secret-service-rust-crypto-std
+            example: secret-service-rust-crypto-std
+
+          # MacOS/iOS Keychain
+
           - os: macos-13
             features: apple-native-std
             example: apple-native-std
@@ -28,6 +51,9 @@ jobs:
           - os: macos-13
             features: apple-native-std
             example: apple-native-std
+
+          # Windows Credentials
+
           - os: windows-latest
             features: windows-native-std
             example: windows-native-std

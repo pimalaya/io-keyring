@@ -1,2 +1,2 @@
-#[cfg(feature = "secret-service-dbus-openssl-std")]
+#[cfg(feature = "secret-service-openssl-std")]
 pub mod std;

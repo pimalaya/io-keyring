@@ -9,7 +9,8 @@ pub mod apple;
 #[cfg(target_os = "linux")]
 #[cfg(any(
     feature = "secret-service-dbus-std",
-    feature = "secret-service-dbus-tokio"
+    feature = "secret-service-dbus-tokio",
+    feature = "secret-service-zbus-async-std"
 ))]
 pub mod secret_service;
 #[cfg(target_os = "windows")]

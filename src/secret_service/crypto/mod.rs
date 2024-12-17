@@ -3,9 +3,9 @@ pub mod common;
 pub mod error;
 pub mod flow;
 pub mod io;
-#[cfg(feature = "secret-service-dbus-openssl-std")]
+#[cfg(feature = "secret-service-openssl-std")]
 pub mod openssl;
-#[cfg(feature = "secret-service-dbus-rust-crypto-std")]
+#[cfg(feature = "secret-service-rust-crypto-std")]
 pub mod rust_crypto;
 
 pub use self::{

@@ -1,6 +1,6 @@
 #![cfg(target_os = "linux")]
 #![cfg(feature = "secret-service-dbus-tokio")]
-#![cfg(feature = "secret-service-dbus-openssl-std")]
+#![cfg(feature = "secret-service-openssl-std")]
 
 use std::env;
 

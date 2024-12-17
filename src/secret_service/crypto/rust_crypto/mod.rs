@@ -1,2 +1,2 @@
-#[cfg(feature = "secret-service-dbus-rust-crypto-std")]
+#[cfg(feature = "secret-service-rust-crypto-std")]
 pub mod std;

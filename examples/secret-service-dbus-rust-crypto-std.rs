@@ -1,6 +1,6 @@
 #![cfg(target_os = "linux")]
 #![cfg(feature = "secret-service-dbus-std")]
-#![cfg(feature = "secret-service-dbus-rust-crypto-std")]
+#![cfg(feature = "secret-service-rust-crypto-std")]
 
 use std::env;
 

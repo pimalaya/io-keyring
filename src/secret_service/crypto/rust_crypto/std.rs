@@ -3,7 +3,6 @@ use aes::cipher::{
 };
 use block_padding::UnpadError;
 use cbc::{Decryptor, Encryptor};
-use dbus::{arg::cast, Path};
 use hkdf::{Hkdf, InvalidLength};
 use num::BigUint;
 use rand::{rngs::OsRng, Rng};
@@ -15,25 +14,40 @@ use crate::secret_service::{
         common::{prepare_derive_shared, AesKey},
         Algorithm, Error, Flow,
     },
-    dbus::Session,
+    Session,
 };
 
-#[derive(Clone, Debug, Default)]
-pub struct IoConnector {
-    session_path: Path<'static>,
+#[derive(Clone, Debug)]
+pub struct IoConnector<P> {
+    session_path: P,
     shared_key: Option<AesKey>,
 }
 
-impl IoConnector {
-    pub fn new(session: &Session) -> Result<Self, Error> {
+impl<P> Default for IoConnector<P>
+where
+    P: Default,
+{
+    fn default() -> Self {
+        Self {
+            session_path: Default::default(),
+            shared_key: None,
+        }
+    }
+}
+
+impl<P> IoConnector<P> {
+    pub fn new(session: &mut Session<P>) -> Result<Self, Error>
+    where
+        P: Default + Clone,
+    {
         let mut connector = Self::default();
         connector.session_path = session.path.clone();
 
         if let Algorithm::Dh = session.encryption() {
-            let pubkey = cast::<Vec<u8>>(session.output()).ok_or(Error::ParsePubkeyError)?;
-            let privkey = session.privkey().ok_or(Error::GetPrivkeyMissingError)?;
+            let pubkey = session.take_output().ok_or(Error::FindPubkeyError)?;
+            let privkey = session.privkey().ok_or(Error::FindPrivkeyError)?;
             let shared_key =
-                derive_shared(privkey, pubkey).map_err(Error::DeriveSharedKeyRustCryptoError)?;
+                derive_shared(privkey, &pubkey).map_err(Error::DeriveSharedKeyRustCryptoError)?;
 
             connector.shared_key.replace(shared_key);
         };

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt, sync::Arc};
 
 use dbus::{
-    arg::{PropMap, RefArg, Variant},
+    arg::{cast, PropMap, RefArg, Variant},
     nonblock::{Proxy, SyncConnection},
     Path,
 };
@@ -24,10 +24,13 @@ use super::api::{
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("cannot create D-Bus connection")]
+    #[error("cannot create Secret Service connection using D-Bus")]
     CreateSessionError(#[source] dbus::Error),
-    #[error("cannot open D-Bus session")]
+    #[error("cannot open Secret Service session using D-Bus")]
     OpenSessionError(#[source] dbus::Error),
+    #[error("cannot parse Secret Service session output using D-Bus")]
+    ParseSessionOutputError,
+
     #[error("cannot get default secret service collection")]
     GetDefaultCollectionError(#[source] dbus::Error),
     #[error("cannot get session secret service collection")]
@@ -107,7 +110,8 @@ impl SecretService {
                     .open_session(alg, input)
                     .await
                     .map_err(Error::OpenSessionError)?;
-                Session::new_dh(keypair, output.0, session_path)
+                let output = cast::<Vec<u8>>(&output.0).ok_or(Error::ParseSessionOutputError)?;
+                Session::new_dh(session_path, keypair, output.clone())
             }
         };
 
@@ -175,12 +179,6 @@ impl SecretService {
         }
     }
 }
-
-// #[derive(Debug)]
-// pub struct Session {
-//     path: Path<'static>,
-//     algorithm: Algorithm,
-// }
 
 #[derive(Debug)]
 pub struct Collection<'a> {
@@ -332,8 +330,8 @@ impl IoConnector {
         })
     }
 
-    pub fn session(&self) -> &Session {
-        &self.dbus.session
+    pub fn session(&mut self) -> &mut Session {
+        &mut self.dbus.session
     }
 
     pub async fn read(&mut self, flow: &mut impl Flow) -> Result<()> {
