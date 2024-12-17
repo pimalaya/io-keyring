@@ -17,6 +17,8 @@ use secrecy::ExposeSecret;
 
 #[tokio::main]
 async fn main() {
+    const SECRET: &str = "secret-service-dbus-openssl-tokio";
+
     let service = env::var("SERVICE").unwrap_or(String::from("test-service"));
     println!("using service name: {service:?}");
 
@@ -34,8 +36,8 @@ async fn main() {
         .unwrap();
     let mut crypto = CryptoIoConnector::new(dbus.session()).unwrap();
 
-    println!("write secret {:?} to entry {service}:{account}", "test");
-    let mut flow = WriteEntryFlow::new(b"test".to_vec(), encryption.clone());
+    println!("write secret {SECRET:?} to entry {service}:{account}");
+    let mut flow = WriteEntryFlow::new(SECRET.as_bytes().to_vec(), encryption.clone());
     while let Some(io) = flow.next() {
         match io {
             secret_service::Io::Crypto(crypto::Io::Encrypt) => {

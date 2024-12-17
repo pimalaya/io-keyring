@@ -6,7 +6,10 @@ fn main() {
     generate_dbus_apis();
 }
 
-#[cfg(feature = "secret-service-dbus-std")]
+#[cfg(any(
+    feature = "secret-service-dbus-std",
+    feature = "secret-service-dbus-tokio"
+))]
 fn generate_dbus_apis() {
     let _ = std::fs::remove_file("./src/secret_service/dbus/blocking/api.rs");
     let _ = std::fs::remove_file("./src/secret_service/dbus/nonblock/api.rs");

@@ -372,10 +372,15 @@ unsafe fn from_wstr(ws: *const u16) -> String {
     String::from_utf16_lossy(slice)
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct IoConnector;
 
 impl IoConnector {
-    pub fn read(flow: &mut impl Flow) -> Result<()> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn read(&self, flow: &mut impl Flow) -> Result<()> {
         let service = flow.get_service();
         let username = flow.get_username();
         let secret = WinCredential::try_new(service, username)?.get_secret_bytes()?;
@@ -383,7 +388,7 @@ impl IoConnector {
         Ok(())
     }
 
-    pub fn write(flow: &mut impl Flow) -> Result<()> {
+    pub fn write(&self, flow: &mut impl Flow) -> Result<()> {
         let secret = flow.take_secret().ok_or(Error::WriteUndefinedSecretError)?;
         let service = flow.get_service();
         let username = flow.get_username();

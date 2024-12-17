@@ -16,6 +16,8 @@ use keyring::{
 use secrecy::ExposeSecret;
 
 fn main() {
+    const SECRET: &str = "secret-service-dbus-openssl-std";
+
     let service = env::var("SERVICE").unwrap_or(String::from("test-service"));
     println!("using service name: {service:?}");
 
@@ -31,8 +33,8 @@ fn main() {
     let mut dbus = DbusIoConnector::new(&service, &account, encryption.clone()).unwrap();
     let mut crypto = CryptoIoConnector::new(dbus.session()).unwrap();
 
-    println!("write secret {:?} to entry {service}:{account}", "test");
-    let mut flow = WriteEntryFlow::new(b"test".to_vec(), encryption.clone());
+    println!("write secret {SECRET:?} to entry {service}:{account}");
+    let mut flow = WriteEntryFlow::new(SECRET.as_bytes().to_vec(), encryption.clone());
     while let Some(io) = flow.next() {
         match io {
             secret_service::Io::Crypto(crypto::Io::Encrypt) => {

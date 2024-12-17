@@ -1,4 +1,8 @@
 pub mod common;
+#[cfg(any(
+    feature = "secret-service-openssl-std",
+    feature = "secret-service-rust-crypto-std",
+))]
 pub mod crypto;
 #[cfg(any(
     feature = "secret-service-dbus-std",

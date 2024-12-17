@@ -12,30 +12,48 @@ jobs:
         include:
           # Secret Service + D-Bus + std (blocking)
 
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             features: secret-service-dbus-std,secret-service-openssl-std
-            example: secret-service-openssl-std
-          - os: ubuntu-latest
+            example: secret-service-dbus-openssl-std
+          - os: ubuntu-24.04
             features: secret-service-dbus-std,secret-service-rust-crypto-std
-            example: secret-service-rust-crypto-std
+            example: secret-service-dbus-rust-crypto-std
 
           # Secret Service + D-Bus + tokio
 
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             features: secret-service-dbus-tokio,secret-service-openssl-std
-            example: secret-service-openssl-std
-          - os: ubuntu-latest
+            example: secret-service-dbus-openssl-tokio
+          - os: ubuntu-24.04
             features: secret-service-dbus-tokio,secret-service-rust-crypto-std
-            example: secret-service-rust-crypto-std
+            example: secret-service-dbus-rust-crypto-tokio
+
+          # Secret Service + Z-Bus + std (blocking)
+
+          - os: ubuntu-24.04
+            features: secret-service-zbus-std,secret-service-openssl-std
+            example: secret-service-zbus-openssl-std
+          - os: ubuntu-24.04
+            features: secret-service-zbus-std,secret-service-rust-crypto-std
+            example: secret-service-zbus-rust-crypto-std
 
           # Secret Service + Z-Bus + async-std
 
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             features: secret-service-zbus-async-std,secret-service-openssl-std
-            example: secret-service-openssl-std
-          - os: ubuntu-latest
+            example: secret-service-zbus-openssl-async-std
+          - os: ubuntu-24.04
             features: secret-service-zbus-async-std,secret-service-rust-crypto-std
-            example: secret-service-rust-crypto-std
+            example: secret-service-zbus-rust-crypto-async-std
+
+          # Secret Service + Z-Bus + tokio
+
+          - os: ubuntu-24.04
+            features: secret-service-zbus-tokio,secret-service-openssl-std
+            example: secret-service-zbus-openssl-tokio
+          - os: ubuntu-24.04
+            features: secret-service-zbus-tokio,secret-service-rust-crypto-std
+            example: secret-service-zbus-rust-crypto-tokio
 
           # MacOS/iOS Keychain
 
@@ -60,8 +78,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: awalsh128/cache-apt-pkgs-action@latest
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         with:
-          packages: libdbus-1-dev
+          packages: libdbus-1-dev libssl-dev gnome-keyring
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'password'
+        if: matrix.os == 'ubuntu-24.04'
       - run: cargo run --features ${{ matrix.features }} --example ${{ matrix.example }}

@@ -38,7 +38,7 @@ full = [
 # Linux Secret service, based on D-Bus
 #
 secret-service-dbus-std = ["dep:dbus", "dep:dbus-codegen"]
-secret-service-dbus-tokio = ["dep:dbus-codegen", "dep:dbus-tokio", "dep:tokio"]
+secret-service-dbus-tokio = ["dep:dbus", "dep:dbus-codegen", "dep:dbus-tokio", "dep:tokio"]
 
 # Linux Secret service, based on Z-Bus
 #
@@ -49,7 +49,7 @@ secret-service-zbus-tokio = ["dep:serde", "dep:tokio", "dep:zbus", "serde?/deriv
 # Linux Secret service crypto
 #
 secret-service-openssl-std = ["dep:num", "dep:openssl", "dep:once_cell", "dep:rand"]
-secret-service-rust-crypto-std = ["dep:aes", "dep:block-padding", "dep:cbc", "dep:hkdf", "dep:sha2"]
+secret-service-rust-crypto-std = ["dep:aes", "dep:block-padding", "dep:cbc", "dep:hkdf", "dep:num", "dep:once_cell", "dep:rand", "dep:sha2"]
 
 # MacOS/iOS Keychain
 #

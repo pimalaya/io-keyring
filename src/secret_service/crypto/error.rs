@@ -2,9 +2,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("cannot find public key for encrypted D-Bus communication")]
+    #[error("cannot find public key for encrypted Secret Service communication")]
     FindPubkeyError,
-    #[error("cannot find private key for encrypted D-Bus communication")]
+    #[error("cannot find private key for encrypted Secret Service communication")]
     FindPrivkeyError,
 
     #[error("cannot encrypt undefined secret")]
@@ -26,8 +26,10 @@ pub enum Error {
     #[error("cannot decrypt secret using Rust Crypto")]
     DecryptSecretRustCryptoError(#[source] block_padding::UnpadError),
 
+    #[cfg(feature = "secret-service-openssl-std")]
     #[error("cannot derive shared key using OpenSSL")]
     DeriveSharedKeyOpensslError(#[source] openssl::error::ErrorStack),
+    #[cfg(feature = "secret-service-rust-crypto-std")]
     #[error("cannot derive shared key using Rust Crypto")]
     DeriveSharedKeyRustCryptoError(#[source] hkdf::InvalidLength),
 }

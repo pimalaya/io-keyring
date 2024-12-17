@@ -7,5 +7,5 @@
 
 pimalaya.mkShell {
   inherit nixpkgs system pkgs fenix extraBuildInputs;
-  rustToolchainFile = ./rust-toolchain.toml;
+  rustToolchainFile = ./rust-toolchain.dev.toml;
 }

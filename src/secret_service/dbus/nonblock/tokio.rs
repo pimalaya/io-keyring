@@ -181,7 +181,8 @@ impl SecretService {
 
     pub async fn disconnect(self) -> Result<()> {
         self.handle.abort();
-        Ok(self.handle.await?)
+        let _ = self.handle.await;
+        Ok(())
     }
 }
 
