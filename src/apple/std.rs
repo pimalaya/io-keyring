@@ -34,23 +34,21 @@ impl IoConnector {
     }
 
     pub fn read(&self, flow: &mut impl PutSecret) -> Result<()> {
-        let key = flow.key();
-        let secret = get_generic_password(&self.service, key).map_err(Error::ReadSecretError)?;
+        let secret =
+            get_generic_password(&self.service, flow.key()).map_err(Error::ReadSecretError)?;
         flow.put_secret(secret.into());
         Ok(())
     }
 
     pub fn write(&self, flow: &mut impl TakeSecret) -> Result<()> {
         let secret = flow.take_secret().ok_or(Error::WriteUndefinedSecretError)?;
-        let key = flow.key();
         let secret = secret.expose_secret();
-        set_generic_password(&self.service, key, secret).map_err(Error::WriteSecretError)?;
+        set_generic_password(&self.service, flow.key(), secret).map_err(Error::WriteSecretError)?;
         Ok(())
     }
 
     pub fn delete(&self, flow: &mut impl Flow) -> Result<()> {
-        let key = flow.key();
-        delete_generic_password(&self.service, key).map_err(Error::DeleteSecretError)?;
+        delete_generic_password(&self.service, flow.key()).map_err(Error::DeleteSecretError)?;
         Ok(())
     }
 }

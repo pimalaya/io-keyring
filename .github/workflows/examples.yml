@@ -4,84 +4,48 @@ on:
   push:
 
 jobs:
-  examples:
-    runs-on: ${{ matrix.os }}
+  secret-service-std:
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Secret Service + D-Bus + std (blocking)
-
-          - os: ubuntu-24.04
-            features: secret-service-dbus-std,secret-service-openssl-std
-            example: secret-service-dbus-openssl-std
-          - os: ubuntu-24.04
-            features: secret-service-dbus-std,secret-service-rust-crypto-std
-            example: secret-service-dbus-rust-crypto-std
-
-          # Secret Service + D-Bus + tokio
-
-          - os: ubuntu-24.04
-            features: secret-service-dbus-tokio,secret-service-openssl-std
-            example: secret-service-dbus-openssl-tokio
-          - os: ubuntu-24.04
-            features: secret-service-dbus-tokio,secret-service-rust-crypto-std
-            example: secret-service-dbus-rust-crypto-tokio
-
-          # Secret Service + Z-Bus + std (blocking)
-
-          - os: ubuntu-24.04
-            features: secret-service-zbus-std,secret-service-openssl-std
-            example: secret-service-zbus-openssl-std
-          - os: ubuntu-24.04
-            features: secret-service-zbus-std,secret-service-rust-crypto-std
-            example: secret-service-zbus-rust-crypto-std
-
-          # Secret Service + Z-Bus + async-std
-
-          - os: ubuntu-24.04
-            features: secret-service-zbus-async-std,secret-service-openssl-std
-            example: secret-service-zbus-openssl-async-std
-          - os: ubuntu-24.04
-            features: secret-service-zbus-async-std,secret-service-rust-crypto-std
-            example: secret-service-zbus-rust-crypto-async-std
-
-          # Secret Service + Z-Bus + tokio
-
-          - os: ubuntu-24.04
-            features: secret-service-zbus-tokio,secret-service-openssl-std
-            example: secret-service-zbus-openssl-tokio
-          - os: ubuntu-24.04
-            features: secret-service-zbus-tokio,secret-service-rust-crypto-std
-            example: secret-service-zbus-rust-crypto-tokio
-
-          # MacOS/iOS Keychain
-
-          - os: macos-13
-            features: apple-native-std
-            example: apple-native-std
-          - os: macos-14
-            features: apple-native-std
-            example: apple-native-std
-          - os: macos-15
-            features: apple-native-std
-            example: apple-native-std
-          - os: macos-13
-            features: apple-native-std
-            example: apple-native-std
-
-          # Windows Credentials
-
-          - os: windows-latest
-            features: windows-native-std
-            example: windows-native-std
+        keyring: [dbus, zbus]
+        crypto: [openssl, rust-crypto]
+        encryption: [plain, dh]
+    env:
+      KEY: ubuntu-24.04-ss-${{ matrix.keyring }}-${{ matrix.crypto }}-${{ matrix.encryption }}-std
+      KEYRING_PROVIDER: ${{ matrix.keyring }}-secret-service
+      SS_CRYPTO_PROVIDER: ${{ matrix.crypto }}
+      SS_CRYPTO_ALGORITHM: ${{ matrix.encryption }}
     steps:
       - uses: actions/checkout@v4
       - uses: awalsh128/cache-apt-pkgs-action@latest
-        if: matrix.os == 'ubuntu-24.04'
         with:
           packages: libdbus-1-dev libssl-dev gnome-keyring
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'password'
-        if: matrix.os == 'ubuntu-24.04'
-      - run: cargo run --features ${{ matrix.features }} --example ${{ matrix.example }}
+      - run: cargo run --features secret-service-${{ matrix.keyring }}-std,secret-service-${{ matrix.crypto }}-std --example std
+
+  apple-keychain-std:
+    runs-on: ${{ matrix.macos }}
+    strategy:
+      fail-fast: false
+      matrix:
+        macos: [macos-13, macos-14, macos-15]
+    env:
+      KEY: ${{ matrix.macos }}-std
+      KEYRING_PROVIDER: apple-keychain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo run --features apple-keychain-std --example std
+
+  windows-credentials-std:
+    runs-on: windows-latest
+    env:
+      KEY: windows-latest-std
+      KEYRING_PROVIDER: windows-credentials
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo run --features windows-credentials-std --example std

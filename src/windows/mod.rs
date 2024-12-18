@@ -1,2 +1,2 @@
-#[cfg(feature = "windows-native-std")]
+#[cfg(feature = "windows-credentials-std")]
 pub mod std;

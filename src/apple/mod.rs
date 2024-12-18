@@ -1,2 +1,2 @@
-#[cfg(feature = "apple-native-std")]
+#[cfg(feature = "apple-keychain-std")]
 pub mod std;

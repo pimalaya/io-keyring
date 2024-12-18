@@ -120,6 +120,7 @@ impl Iterator for DeleteEntryFlow {
         if self.deleted {
             None
         } else {
+            self.deleted = true;
             Some(Io::Delete)
         }
     }

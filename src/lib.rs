@@ -1,16 +1,14 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
-#[cfg(target_vendor = "apple")]
-#[cfg(feature = "apple-native")]
+#[cfg(feature = "apple-keychain")]
 pub mod apple;
 pub mod flow;
 pub mod io;
-#[cfg(target_os = "linux")]
 #[cfg(feature = "secret-service")]
 pub mod secret_service;
-#[cfg(target_os = "windows")]
-#[cfg(feature = "windows-native")]
+pub mod std;
+#[cfg(feature = "windows-credentials")]
 pub mod windows;
 
 pub use self::{flow::*, io::*};
