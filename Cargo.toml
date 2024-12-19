@@ -59,7 +59,7 @@ secret-service-zbus-tokio = ["dep:tokio", "secret-service-zbus"]
 # Linux Secret service,
 # Crypto provider (for encrypted sessions)
 #
-secret-service-crypto = ["dep:num", "dep:once_cell", "dep:rand"]
+secret-service-crypto = ["dep:num", "dep:once_cell", "dep:rand", "secret-service"]
 secret-service-openssl-std = ["dep:openssl", "secret-service-crypto"]
 secret-service-rust-crypto-std = ["dep:aes", "dep:block-padding", "dep:cbc", "dep:hkdf", "dep:sha2", "secret-service-crypto"]
 

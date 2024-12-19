@@ -1,61 +1,10 @@
 # 🔐 keyring-lib
 
-High-level, asynchronous API for [`keyring-rs`](https://crates.io/crates/keyring), a cross-platform Rust library to manage credentials.
+Cross-platform, sans I/O library to manage credentials, written in Rust.
 
-## Features
+![scheme](./scheme.svg)
 
-- Uses [Secret Service](https://specifications.freedesktop.org/secret-service-spec/latest/) on *Linux*
-- Uses the [keyutils](https://man7.org/linux/man-pages/man7/keyutils.7.html) secure, in-memory *Linux* kernel cache (if available)
-- Uses default system security credential on *MacOS* and *Windows*
-- Supports **tokio** and **async-std** async runtimes
-- Supports **rustls** and **openssl** crypto libs
-- Supports **serde** (de)serialization from/to `String`
-
-The library comes with 6 [cargo features](https://doc.rust-lang.org/cargo/reference/features.html), including 2 default ones:
-
-- **`tokio`**: enables the [tokio](https://crates.io/crates/tokio) async runtime
-- `async-std`: enables the [async-std](https://crates.io/crates/async-std) async runtime
-- **`rustls`**: enables the [rustls](https://crates.io/crates/rustls) crypto
-- `openssl`: enables the [openssl](https://crates.io/crates/openssl) crypto
-- `derive`: enables [serde](https://crates.io/crates/serde) support
-- `vendored`: compiles and statically link to a copy of non-Rust vendors like OpenSSL
-
-## Example
-
-```rust
-use keyring::{set_global_service_name, KeyringEntry};
-
-#[tokio::main]
-async fn main() {
-    // define the global keyring service name once
-    set_global_service_name("example");
-
-    // create a keyring entry from a key string
-    let entry = KeyringEntry::try_new("key").unwrap();
-
-    // define a secret
-    entry.set_secret("secret").await.unwrap();
-
-    // get a secret
-    entry.get_secret().await.unwrap();
-
-    // find a secret
-    entry.find_secret().await.unwrap();
-
-    // delete a secret entry
-    entry.delete_secret().await.unwrap();
-}
-```
-
-*See the full API documentation on [docs.rs](https://docs.rs/keyring-lib/latest/keyring/).*
-
-## FAQ
-
-<details>
-  <summary>Why not using <code>keyring-rs</code> directly?</summary>
-
-  This library can be seen as a *convenient async wrapper* around `keyring-rs`. If you have an async app and just want to have a default keystore for any target OS, then `keyring-lib` is the right choice. If you do not have an async app, or you want more control over keystores, using `keyring-rs` is a much better choice.
-</details>
+*TODO*
 
 ## Sponsoring
 
