@@ -1,7 +1,21 @@
+use std::marker::PhantomData;
+
 use secrecy::SecretSlice;
 use thiserror::Error;
 
+#[cfg(feature = "apple-keychain-std")]
+use crate::apple_keychain::std as apple_keychain;
 use crate::sans_io::*;
+#[cfg(feature = "secret-service-crypto")]
+use crate::secret_service::crypto::sans_io::{PutSalt, TakeSalt};
+#[cfg(feature = "secret-service-crypto")]
+use crate::secret_service::crypto::{self, sans_io::Algorithm};
+#[cfg(feature = "secret-service-dbus-std")]
+use crate::secret_service::dbus::blocking::std as dbus_secret_service;
+#[cfg(feature = "secret-service-zbus-std")]
+use crate::secret_service::zbus::std as zbus_secret_service;
+#[cfg(feature = "windows-credentials-std")]
+use crate::windows_credentials::std as windows_credentials;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -21,46 +35,37 @@ pub enum Error {
 
     #[cfg(feature = "apple-keychain-std")]
     #[error(transparent)]
-    AppleKeychainError(#[from] crate::apple_keychain::std::Error),
+    AppleKeychainError(#[from] apple_keychain::Error),
     #[cfg(feature = "windows-credentials-std")]
     #[error(transparent)]
-    WindowsCredentialsError(#[from] crate::windows_credentials::std::Error),
+    WindowsCredentialsError(#[from] windows_credentials::Error),
     #[cfg(feature = "secret-service-dbus-std")]
     #[error(transparent)]
-    SecretServiceDbusError(#[from] crate::secret_service::dbus::blocking::std::Error),
+    SecretServiceDbusError(#[from] dbus_secret_service::Error),
     #[cfg(feature = "secret-service-zbus-std")]
     #[error(transparent)]
-    SecretServiceZbusError(#[from] crate::secret_service::zbus::std::Error),
+    SecretServiceZbusError(#[from] zbus_secret_service::Error),
     #[cfg(feature = "secret-service-openssl-std")]
     #[error(transparent)]
-    OpensslError(#[from] crate::secret_service::crypto::openssl::std::Error),
+    OpensslError(#[from] crypto::openssl::std::Error),
     #[cfg(feature = "secret-service-rust-crypto-std")]
     #[error(transparent)]
-    RustCryptoError(#[from] crate::secret_service::crypto::rust_crypto::std::Error),
+    RustCryptoError(#[from] crypto::rust_crypto::std::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub enum Crypto<P> {
-    Undefined(std::marker::PhantomData<P>),
+    Undefined(PhantomData<P>),
     #[cfg(feature = "secret-service-openssl-std")]
-    Openssl(
-        crate::secret_service::crypto::openssl::std::IoConnector<P>,
-        crate::secret_service::crypto::sans_io::Algorithm,
-    ),
+    Openssl(crypto::openssl::std::IoConnector<P>, Algorithm),
     #[cfg(feature = "secret-service-rust-crypto-std")]
-    RustCrypto(
-        crate::secret_service::crypto::rust_crypto::std::IoConnector<P>,
-        crate::secret_service::crypto::sans_io::Algorithm,
-    ),
+    RustCrypto(crypto::rust_crypto::std::IoConnector<P>, Algorithm),
 }
 
 impl<P> Crypto<P> {
     #[cfg(feature = "secret-service-crypto")]
-    pub fn decrypt<F>(&mut self, flow: &mut F) -> Result<()>
-    where
-        F: TakeSecret + PutSecret + crate::secret_service::crypto::sans_io::TakeSalt,
-    {
+    pub fn decrypt<F: TakeSecret + PutSecret + TakeSalt>(&mut self, flow: &mut F) -> Result<()> {
         match self {
             Self::Undefined(_) => Err(Error::DecryptMissingCryptoProviderError),
             #[cfg(feature = "secret-service-openssl-std")]
@@ -71,10 +76,7 @@ impl<P> Crypto<P> {
     }
 
     #[cfg(feature = "secret-service-crypto")]
-    pub fn encrypt<F>(&mut self, flow: &mut F) -> Result<()>
-    where
-        F: TakeSecret + PutSecret + crate::secret_service::crypto::sans_io::PutSalt,
-    {
+    pub fn encrypt<F: TakeSecret + PutSecret + PutSalt>(&mut self, flow: &mut F) -> Result<()> {
         match self {
             Self::Undefined(_) => Err(Error::EncryptMissingCryptoProviderError),
             #[cfg(feature = "secret-service-openssl-std")]
@@ -84,9 +86,10 @@ impl<P> Crypto<P> {
         }
     }
 
-    pub fn algorithm(&self) -> crate::secret_service::crypto::sans_io::Algorithm {
+    #[cfg(feature = "secret-service-crypto")]
+    pub fn algorithm(&self) -> Algorithm {
         match self {
-            Self::Undefined(_) => crate::secret_service::crypto::sans_io::Algorithm::Plain,
+            Self::Undefined(_) => Algorithm::Plain,
             #[cfg(feature = "secret-service-openssl-std")]
             Self::Openssl(_, algorithm) => algorithm.clone(),
             #[cfg(feature = "secret-service-rust-crypto-std")]
@@ -104,17 +107,17 @@ impl<P> Default for Crypto<P> {
 pub enum Keyring {
     Undefined,
     #[cfg(feature = "apple-keychain-std")]
-    AppleKeychain(crate::apple_keychain::std::IoConnector),
+    AppleKeychain(apple_keychain::IoConnector),
     #[cfg(feature = "windows-credentials-std")]
-    WindowsCredentials(crate::windows_credentials::std::IoConnector),
+    WindowsCredentials(windows_credentials::IoConnector),
     #[cfg(feature = "secret-service-dbus-std")]
     DbusSecretService(
-        crate::secret_service::dbus::blocking::std::IoConnector,
+        dbus_secret_service::IoConnector,
         Crypto<dbus::Path<'static>>,
     ),
     #[cfg(feature = "secret-service-zbus-std")]
     ZbusSecretService(
-        crate::secret_service::zbus::std::IoConnector,
+        zbus_secret_service::IoConnector,
         Crypto<zbus::zvariant::OwnedObjectPath>,
     ),
 }
@@ -122,45 +125,37 @@ pub enum Keyring {
 impl Keyring {
     #[cfg(feature = "apple-keychain-std")]
     pub fn apple_keychain(service: impl ToString) -> Self {
-        use crate::apple_keychain::std::IoConnector;
-        Self::AppleKeychain(IoConnector::new(service))
+        Self::AppleKeychain(apple_keychain::IoConnector::new(service))
     }
 
     #[cfg(feature = "windows-credentials-std")]
     pub fn windows_credentials(service: impl ToString) -> Self {
-        use crate::windows_credentials::std::IoConnector;
+        use windows_credentials::IoConnector;
         Self::WindowsCredentials(IoConnector::new(service))
     }
 
     #[cfg(feature = "secret-service-dbus-std")]
     pub fn dbus_secret_service(
         service: impl ToString,
-        crypto: crate::secret_service::crypto::std::Crypto,
-    ) -> crate::secret_service::dbus::blocking::std::Result<Self> {
-        use crate::secret_service::{
-            crypto::{self, sans_io::Algorithm},
-            dbus::blocking::std::IoConnector,
-        };
-
+        crypto: crypto::std::Crypto,
+    ) -> dbus_secret_service::Result<Self> {
         match crypto {
             crypto::std::Crypto::None => {
-                let dbus = IoConnector::new(service, Algorithm::Plain)?;
+                let dbus = dbus_secret_service::IoConnector::new(service, Algorithm::Plain)?;
                 let crypto = Crypto::Undefined(Default::default());
                 Ok(Self::DbusSecretService(dbus, crypto))
             }
             #[cfg(feature = "secret-service-openssl-std")]
             crypto::std::Crypto::Openssl(algorithm) => {
-                use crate::secret_service::crypto::openssl;
-                let mut dbus = IoConnector::new(service, algorithm.clone())?;
-                let crypto = openssl::std::IoConnector::new(dbus.session())?;
+                let mut dbus = dbus_secret_service::IoConnector::new(service, algorithm.clone())?;
+                let crypto = crypto::openssl::std::IoConnector::new(dbus.session())?;
                 let crypto = Crypto::Openssl(crypto, algorithm);
                 Ok(Self::DbusSecretService(dbus, crypto))
             }
             #[cfg(feature = "secret-service-rust-crypto-std")]
             crypto::std::Crypto::RustCrypto(algorithm) => {
-                use crate::secret_service::crypto::rust_crypto;
-                let mut dbus = IoConnector::new(service, algorithm.clone())?;
-                let crypto = rust_crypto::std::IoConnector::new(dbus.session())?;
+                let mut dbus = dbus_secret_service::IoConnector::new(service, algorithm.clone())?;
+                let crypto = crypto::rust_crypto::std::IoConnector::new(dbus.session())?;
                 let crypto = Crypto::RustCrypto(crypto, algorithm);
                 Ok(Self::DbusSecretService(dbus, crypto))
             }
@@ -170,32 +165,25 @@ impl Keyring {
     #[cfg(feature = "secret-service-zbus-std")]
     pub fn zbus_secret_service(
         service: impl ToString,
-        crypto: crate::secret_service::crypto::std::Crypto,
-    ) -> crate::secret_service::zbus::std::Result<Self> {
-        use crate::secret_service::{
-            crypto::{self, sans_io::Algorithm},
-            zbus::std::IoConnector,
-        };
-
+        crypto: crypto::std::Crypto,
+    ) -> zbus_secret_service::Result<Self> {
         match crypto {
             crypto::std::Crypto::None => {
-                let zbus = IoConnector::new(service, Algorithm::Plain)?;
+                let zbus = zbus_secret_service::IoConnector::new(service, Algorithm::Plain)?;
                 let crypto = Crypto::Undefined(Default::default());
                 Ok(Self::ZbusSecretService(zbus, crypto))
             }
             #[cfg(feature = "secret-service-openssl-std")]
             crypto::std::Crypto::Openssl(algorithm) => {
-                use crate::secret_service::crypto::openssl;
-                let mut zbus = IoConnector::new(service, algorithm.clone())?;
-                let crypto = openssl::std::IoConnector::new(zbus.session())?;
+                let mut zbus = zbus_secret_service::IoConnector::new(service, algorithm.clone())?;
+                let crypto = crypto::openssl::std::IoConnector::new(zbus.session())?;
                 let crypto = Crypto::Openssl(crypto, algorithm);
                 Ok(Self::ZbusSecretService(zbus, crypto))
             }
             #[cfg(feature = "secret-service-rust-crypto-std")]
             crypto::std::Crypto::RustCrypto(algorithm) => {
-                use crate::secret_service::crypto::rust_crypto;
-                let mut zbus = IoConnector::new(service, algorithm.clone())?;
-                let crypto = rust_crypto::std::IoConnector::new(zbus.session())?;
+                let mut zbus = zbus_secret_service::IoConnector::new(service, algorithm.clone())?;
+                let crypto = crypto::rust_crypto::std::IoConnector::new(zbus.session())?;
                 let crypto = Crypto::RustCrypto(crypto, algorithm);
                 Ok(Self::ZbusSecretService(zbus, crypto))
             }
@@ -237,19 +225,23 @@ impl Keyring {
             }
             #[cfg(feature = "secret-service-dbus-std")]
             Self::DbusSecretService(dbus, crypto) => {
-                use crate::secret_service::{self, sans_io::ReadEntryFlow};
+                use crate::{
+                    sans_io::Io as EntryIo,
+                    secret_service::{
+                        crypto::sans_io::Io as CryptoIo,
+                        sans_io::{Io, ReadEntryFlow},
+                    },
+                };
 
                 let mut flow = ReadEntryFlow::new(key.as_ref(), crypto.algorithm());
 
                 while let Some(io) = flow.next() {
                     match io {
-                        secret_service::sans_io::Io::Entry(Io::Read) => {
+                        Io::Entry(EntryIo::Read) => {
                             dbus.read(&mut flow)?;
                         }
                         #[cfg(feature = "secret-service-crypto")]
-                        secret_service::sans_io::Io::Crypto(
-                            secret_service::crypto::sans_io::Io::Decrypt,
-                        ) => {
+                        Io::Crypto(CryptoIo::Decrypt) => {
                             crypto.decrypt(&mut flow)?;
                         }
                         _ => (),
@@ -260,19 +252,23 @@ impl Keyring {
             }
             #[cfg(feature = "secret-service-zbus-std")]
             Self::ZbusSecretService(zbus, crypto) => {
-                use crate::secret_service::{self, sans_io::ReadEntryFlow};
+                use crate::{
+                    sans_io::Io as EntryIo,
+                    secret_service::{
+                        crypto::sans_io::Io as CryptoIo,
+                        sans_io::{Io, ReadEntryFlow},
+                    },
+                };
 
                 let mut flow = ReadEntryFlow::new(key.as_ref(), crypto.algorithm());
 
                 while let Some(io) = flow.next() {
                     match io {
-                        secret_service::sans_io::Io::Entry(Io::Read) => {
+                        Io::Entry(EntryIo::Read) => {
                             zbus.read(&mut flow)?;
                         }
                         #[cfg(feature = "secret-service-crypto")]
-                        secret_service::sans_io::Io::Crypto(
-                            secret_service::crypto::sans_io::Io::Decrypt,
-                        ) => {
+                        Io::Crypto(CryptoIo::Decrypt) => {
                             crypto.decrypt(&mut flow)?;
                         }
                         _ => (),
@@ -323,19 +319,23 @@ impl Keyring {
             }
             #[cfg(feature = "secret-service-dbus-std")]
             Self::DbusSecretService(dbus, crypto) => {
-                use crate::secret_service::{self, sans_io::WriteEntryFlow};
+                use crate::{
+                    sans_io::Io as EntryIo,
+                    secret_service::{
+                        crypto::sans_io::Io as CryptoIo,
+                        sans_io::{Io, WriteEntryFlow},
+                    },
+                };
 
                 let mut flow = WriteEntryFlow::new(key.as_ref(), secret, crypto.algorithm());
 
                 while let Some(io) = flow.next() {
                     match io {
                         #[cfg(feature = "secret-service-crypto")]
-                        secret_service::sans_io::Io::Crypto(
-                            secret_service::crypto::sans_io::Io::Encrypt,
-                        ) => {
+                        Io::Crypto(CryptoIo::Encrypt) => {
                             crypto.encrypt(&mut flow)?;
                         }
-                        secret_service::sans_io::Io::Entry(Io::Write) => {
+                        Io::Entry(EntryIo::Write) => {
                             dbus.write(&mut flow)?;
                         }
                         _ => (),
@@ -346,19 +346,23 @@ impl Keyring {
             }
             #[cfg(feature = "secret-service-zbus-std")]
             Self::ZbusSecretService(zbus, crypto) => {
-                use crate::secret_service::{self, sans_io::WriteEntryFlow};
+                use crate::{
+                    sans_io::Io as EntryIo,
+                    secret_service::{
+                        crypto::sans_io::Io as CryptoIo,
+                        sans_io::{Io, WriteEntryFlow},
+                    },
+                };
 
                 let mut flow = WriteEntryFlow::new(key.as_ref(), secret, crypto.algorithm());
 
                 while let Some(io) = flow.next() {
                     match io {
                         #[cfg(feature = "secret-service-crypto")]
-                        secret_service::sans_io::Io::Crypto(
-                            secret_service::crypto::sans_io::Io::Encrypt,
-                        ) => {
+                        Io::Crypto(CryptoIo::Encrypt) => {
                             crypto.encrypt(&mut flow)?;
                         }
-                        secret_service::sans_io::Io::Entry(Io::Write) => {
+                        Io::Entry(EntryIo::Write) => {
                             zbus.write(&mut flow)?;
                         }
                         _ => (),
@@ -405,13 +409,16 @@ impl Keyring {
             }
             #[cfg(feature = "secret-service-dbus-std")]
             Self::DbusSecretService(dbus, _) => {
-                use crate::secret_service::{self, sans_io::DeleteEntryFlow};
+                use crate::{
+                    sans_io::Io as EntryIo,
+                    secret_service::sans_io::{DeleteEntryFlow, Io},
+                };
 
                 let mut flow = DeleteEntryFlow::new(key.as_ref());
 
                 while let Some(io) = flow.next() {
                     match io {
-                        secret_service::sans_io::Io::Entry(Io::Delete) => {
+                        Io::Entry(EntryIo::Delete) => {
                             dbus.delete(&mut flow)?;
                         }
                         _ => (),
@@ -422,13 +429,16 @@ impl Keyring {
             }
             #[cfg(feature = "secret-service-zbus-std")]
             Self::ZbusSecretService(zbus, _) => {
-                use crate::secret_service::{self, sans_io::DeleteEntryFlow};
+                use crate::{
+                    sans_io::Io as EntryIo,
+                    secret_service::sans_io::{DeleteEntryFlow, Io},
+                };
 
                 let mut flow = DeleteEntryFlow::new(key.as_ref());
 
                 while let Some(io) = flow.next() {
                     match io {
-                        secret_service::sans_io::Io::Entry(Io::Delete) => {
+                        Io::Entry(EntryIo::Delete) => {
                             zbus.delete(&mut flow)?;
                         }
                         _ => (),

@@ -4,7 +4,7 @@
 #[cfg(feature = "apple-keychain")]
 #[path = "apple-keychain/mod.rs"]
 pub mod apple_keychain;
-#[path = "sans-io.rs"]
+#[path = "sans-io/mod.rs"]
 pub mod sans_io;
 #[cfg(feature = "secret-service")]
 #[path = "secret-service/mod.rs"]
