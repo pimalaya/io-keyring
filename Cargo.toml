@@ -35,10 +35,11 @@ full = [
   "secret-service-rust-crypto-std",
 ]
 
-## Linux Secret service
+# Linux Secret service
 #
-secret-service = ["dep:num", "dep:once_cell", "dep:rand"]
-#
+secret-service = []
+
+# Linux Secret service,
 # D-Bus implementation (requires libdbus)
 #
 secret-service-dbus = ["dep:dbus", "secret-service"]
@@ -46,30 +47,33 @@ secret-service-dbus-blocking = ["dep:dbus-codegen", "secret-service-dbus"]
 secret-service-dbus-nonblock = ["dep:dbus-codegen", "dbus/futures", "secret-service-dbus"]
 secret-service-dbus-std = ["secret-service-dbus-blocking"]
 secret-service-dbus-tokio = ["dep:dbus-tokio", "dep:tokio", "secret-service-dbus-nonblock"]
-#
+
+# Linux Secret service,
 # Z-Bus implementation (pure Rust)
 #
 secret-service-zbus = ["dep:serde", "dep:zbus", "serde?/derive", "secret-service"]
 secret-service-zbus-std = ["zbus?/blocking-api", "secret-service-zbus"]
 secret-service-zbus-async-std = ["dep:async-std", "secret-service-zbus"]
 secret-service-zbus-tokio = ["dep:tokio", "secret-service-zbus"]
-#
-# Crypto (for encrypted sessions)
-#
-secret-service-openssl-std = ["dep:openssl"]
-secret-service-rust-crypto-std = ["dep:aes", "dep:block-padding", "dep:cbc", "dep:hkdf", "dep:sha2"]
 
-## MacOS/iOS Keychain
+# Linux Secret service,
+# Crypto provider (for encrypted sessions)
+#
+secret-service-crypto = ["dep:num", "dep:once_cell", "dep:rand"]
+secret-service-openssl-std = ["dep:openssl", "secret-service-crypto"]
+secret-service-rust-crypto-std = ["dep:aes", "dep:block-padding", "dep:cbc", "dep:hkdf", "dep:sha2", "secret-service-crypto"]
+
+# MacOS/iOS Keychain
 #
 apple-keychain = []
 apple-keychain-std = ["dep:security-framework", "apple-keychain"]
 
-## Windows Credentials
+# Windows Credentials
 #
 windows-credentials = []
 windows-credentials-std = ["dep:byteorder", "dep:windows-sys", "windows-credentials"]
 
-## Vendored
+# Vendored
 #
 vendored = ["dbus?/vendored", "openssl?/vendored"]
 

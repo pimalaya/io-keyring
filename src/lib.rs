@@ -2,13 +2,14 @@
 #![doc = include_str!("../README.md")]
 
 #[cfg(feature = "apple-keychain")]
-pub mod apple;
-pub mod flow;
-pub mod io;
+#[path = "apple-keychain/mod.rs"]
+pub mod apple_keychain;
+#[path = "sans-io.rs"]
+pub mod sans_io;
 #[cfg(feature = "secret-service")]
+#[path = "secret-service/mod.rs"]
 pub mod secret_service;
 pub mod std;
 #[cfg(feature = "windows-credentials")]
-pub mod windows;
-
-pub use self::{flow::*, io::*};
+#[path = "windows-credentials/mod.rs"]
+pub mod windows_credentials;

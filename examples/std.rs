@@ -1,7 +1,9 @@
 use std::env;
 
+#[cfg(feature = "secret-service-crypto")]
+use keyring::secret_service::crypto::sans_io::Algorithm;
 #[cfg(feature = "secret-service")]
-use keyring::secret_service::crypto::{Algorithm, Provider};
+use keyring::secret_service::crypto::std::Crypto;
 use keyring::std::Keyring;
 use secrecy::ExposeSecret;
 
@@ -14,29 +16,28 @@ fn main() {
     println!("using entry key: {key:?}");
     println!("using entry value: {val:?}");
 
-    #[cfg(feature = "secret-service")]
+    #[cfg(feature = "secret-service-crypto")]
     let ss_crypto_algorithm = match env::var("SS_CRYPTO_ALGORITHM") {
         Ok(crypto) if crypto.trim().eq_ignore_ascii_case("plain") => Algorithm::Plain,
-        Ok(crypto) if crypto.trim().eq_ignore_ascii_case("dh") => Algorithm::Dh,
+        #[cfg(feature = "secret-service-crypto")]
+        Ok(crypto) if crypto.trim().eq_ignore_ascii_case("dh") => Algorithm::dh(),
         _ => Algorithm::Plain,
     };
 
     #[cfg(feature = "secret-service")]
-    let ss_crypto_provider =
-        match env::var("SS_CRYPTO_PROVIDER").expect("missing SS_CRYPTO_PROVIDER env var") {
-            #[cfg(feature = "secret-service-openssl-std")]
-            var if var.trim().eq_ignore_ascii_case("openssl") => {
-                Provider::Openssl(ss_crypto_algorithm.clone())
-            }
-            #[cfg(feature = "secret-service-rust-crypto-std")]
-            var if var.trim().eq_ignore_ascii_case("rust-crypto") => {
-                Provider::RustCrypto(ss_crypto_algorithm.clone())
-            }
-            _ => panic!("cannot select std secret service crypto provider"),
-        };
+    let ss_crypto_provider = match env::var("SS_CRYPTO_PROVIDER") {
+        #[cfg(feature = "secret-service-openssl-std")]
+        Ok(var) if var.trim().eq_ignore_ascii_case("openssl") => {
+            Crypto::Openssl(ss_crypto_algorithm.clone())
+        }
+        #[cfg(feature = "secret-service-rust-crypto-std")]
+        Ok(var) if var.trim().eq_ignore_ascii_case("rust-crypto") => {
+            Crypto::RustCrypto(ss_crypto_algorithm.clone())
+        }
+        _ => Crypto::None,
+    };
 
-    let mut keyring = match env::var("KEYRING_PROVIDER").expect("missing KEYRING_PROVIDER env var")
-    {
+    let mut keyring = match env::var("KEYRING_PROVIDER").expect("missing KEYRING_PROVIDER") {
         #[cfg(feature = "apple-keychain-std")]
         var if var.trim().eq_ignore_ascii_case("apple-keychain") => {
             println!("using Apple Keychain");
@@ -49,7 +50,7 @@ fn main() {
         }
         #[cfg(feature = "secret-service-dbus-std")]
         var if var.trim().eq_ignore_ascii_case("dbus-secret-service") => {
-            println!("using Secret Service with D-Bus");
+            println!("using Secret Service: D-Bus");
             println!("using Secret Service crypto provider: {ss_crypto_provider:?}");
             Keyring::dbus_secret_service(&service, ss_crypto_provider).unwrap()
         }
