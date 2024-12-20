@@ -6,7 +6,7 @@ use tracing::error;
 use zbus::{
     blocking::Connection,
     proxy::CacheProperties,
-    zvariant::{OwnedObjectPath, Value},
+    zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value},
 };
 
 #[cfg(feature = "secret-service-crypto")]
@@ -25,8 +25,8 @@ use crate::{
 use super::{
     api::{
         CreateCollectionResult, CreateItemResult, OrgFreedesktopSecretCollectionProxyBlocking,
-        OrgFreedesktopSecretItemProxyBlocking, OrgFreedesktopSecretServiceProxyBlocking,
-        SecretStruct,
+        OrgFreedesktopSecretItemProxyBlocking, OrgFreedesktopSecretPromptProxyBlocking,
+        OrgFreedesktopSecretServiceProxyBlocking, SecretStruct,
     },
     Session,
 };
@@ -46,6 +46,21 @@ pub enum Error {
     BuildServiceProxyDestinationError(#[source] zbus::Error),
     #[error("cannot build Secret Service service proxy using Z-Bus: invalid path")]
     BuildServiceProxyPathError(#[source] zbus::Error),
+
+    #[error("cannot build Secret Service prompt proxy using Z-Bus")]
+    BuildPromptProxyError(#[source] zbus::Error),
+    #[error("cannot build Secret Service prompt proxy using Z-Bus: invalid destination")]
+    BuildPromptProxyDestinationError(#[source] zbus::Error),
+    #[error("cannot build Secret Service prompt proxy using Z-Bus: invalid path")]
+    BuildPromptProxyPathError(#[source] zbus::Error),
+    #[error("cannot prompt Secret Service using Z-Bus")]
+    PromptError(#[source] zbus::Error),
+    #[error("cannot parse Secret Service prompt arguments using Z-Bus")]
+    ParsePromptArgsError(#[source] zbus::Error),
+    #[error("cannot prompt Secret Service using Z-Bus: prompt dismissed")]
+    PromptDismissedError,
+    #[error("cannot parse Secret Service prompt path using Z-Bus")]
+    ParsePromptPathError(#[source] zbus::zvariant::Error),
 
     #[error("cannot build Secret Service collection proxy using Z-Bus")]
     BuildCollectionProxyError(#[source] zbus::Error),
@@ -175,14 +190,14 @@ impl SecretService {
 
                 let CreateCollectionResult {
                     collection: collection_path,
-                    prompt: _prompt,
+                    prompt: prompt_path,
                 } = proxy
                     .create_collection(props, "default")
                     .map_err(Error::CreateDefaultCollectionError)?;
 
                 let collection_path = if collection_path == empty_path {
                     // no creation path, so prompt
-                    todo!()
+                    self.prompt(&prompt_path)?
                 } else {
                     collection_path
                 };
@@ -190,6 +205,32 @@ impl SecretService {
                 Ok(Collection::new(self, collection_path)?)
             }
         }
+    }
+
+    fn prompt(&self, prompt: &ObjectPath) -> Result<OwnedObjectPath> {
+        let proxy = OrgFreedesktopSecretPromptProxyBlocking::builder(&self.connection)
+            .destination(DBUS_DEST)
+            .map_err(Error::BuildPromptProxyDestinationError)?
+            .path(prompt)
+            .map_err(Error::BuildPromptProxyPathError)?
+            .cache_properties(CacheProperties::No)
+            .build()
+            .map_err(Error::BuildPromptProxyError)?;
+
+        let mut receive_completed_iter = proxy.receive_completed().map_err(Error::PromptError)?;
+        proxy.prompt("").map_err(Error::PromptError)?;
+
+        let signal = receive_completed_iter.next().unwrap();
+        let args = signal.args().map_err(Error::ParsePromptArgsError)?;
+
+        if args.dismissed {
+            return Err(Error::PromptDismissedError);
+        }
+
+        let value = OwnedValue::try_from(args.result).map_err(Error::ParsePromptPathError)?;
+        let path = OwnedObjectPath::try_from(value).map_err(Error::ParsePromptPathError)?;
+
+        Ok(path)
     }
 }
 
@@ -273,7 +314,7 @@ impl<'a> Collection<'a> {
 
         let CreateItemResult {
             item: item_path,
-            prompt: _prompt,
+            prompt: prompt_path,
         } = self
             .proxy
             .create_item(props, secret, true)
@@ -281,7 +322,7 @@ impl<'a> Collection<'a> {
 
         let item_path = if item_path == OwnedObjectPath::default() {
             // no creation path, so prompt
-            todo!()
+            self.service.prompt(&prompt_path)?
         } else {
             item_path
         };
