@@ -1,15 +1,22 @@
-use std::{collections::HashMap, fmt};
+use std::{
+    collections::HashMap,
+    fmt,
+    sync::mpsc::{channel, TryRecvError},
+    time::Duration,
+};
 
 use dbus::{
-    arg::{PropMap, RefArg, Variant},
+    arg::{cast, PropMap, RefArg, Variant},
     blocking::{Connection, Proxy},
-    Path,
+    Message, Path,
 };
 use secrecy::{ExposeSecret, SecretSlice};
 use thiserror::Error;
+use tracing::warn;
 
 use super::api::{
-    OrgFreedesktopSecretCollection, OrgFreedesktopSecretItem, OrgFreedesktopSecretService,
+    OrgFreedesktopSecretCollection, OrgFreedesktopSecretItem, OrgFreedesktopSecretPrompt,
+    OrgFreedesktopSecretPromptCompleted, OrgFreedesktopSecretService,
 };
 #[cfg(feature = "secret-service-crypto")]
 use crate::secret_service::crypto::{
@@ -57,6 +64,21 @@ pub enum Error {
     #[error("cannot write empty secret into Secret Service entry using D-Bus")]
     WriteEmptySecretError,
 
+    #[error("cannot prompt using D-Bus")]
+    PromptError(#[source] dbus::Error),
+    #[error("cannot prompt using D-Bus: match signal error")]
+    PromptMatchSignalError(#[source] dbus::Error),
+    #[error("cannot prompt using D-Bus: match stop error")]
+    PromptMatchStopError(#[source] dbus::Error),
+    #[error("cannot prompt using D-Bus: request timed out")]
+    PromptTimeoutError,
+    #[error("cannot prompt using D-Bus: prompt dismissed")]
+    PromptDismissedError,
+    #[error("cannot prompt using D-Bus: invalid prompt signal path")]
+    ParsePromptPathError,
+    #[error("cannot prompt using D-Bus: invalid prompt signal")]
+    ParsePromptSignalError,
+
     #[cfg(feature = "secret-service-openssl-std")]
     #[error(transparent)]
     OpensslError(#[from] crypto::openssl::std::Error),
@@ -99,8 +121,7 @@ impl SecretService {
                 let (output, session_path) = proxy
                     .open_session(ALGORITHM_DH, input)
                     .map_err(Error::OpenSessionError)?;
-                let output =
-                    dbus::arg::cast::<Vec<u8>>(&output.0).ok_or(Error::ParseSessionOutputError)?;
+                let output = cast::<Vec<u8>>(&output.0).ok_or(Error::ParseSessionOutputError)?;
                 Session::new_dh(session_path, keypair, output.clone())
             }
         };
@@ -143,13 +164,13 @@ impl SecretService {
                     Variant(Box::new(String::from("default")) as Box<dyn RefArg>),
                 )));
 
-                let (collection_path, _prompt_path) = proxy
+                let (collection_path, prompt_path) = proxy
                     .create_collection(props, "default")
                     .map_err(Error::CreateDefaultCollectionError)?;
 
                 let collection_path = if collection_path == empty_path {
                     // no creation path, so prompt
-                    todo!()
+                    self.prompt(&prompt_path)?
                 } else {
                     collection_path
                 };
@@ -158,13 +179,61 @@ impl SecretService {
             }
         }
     }
-}
 
-// #[derive(Debug)]
-// pub struct Session {
-//     path: Path<'static>,
-//     algorithm: Algorithm,
-// }
+    fn prompt(&self, path: &Path) -> Result<Path<'static>> {
+        let timeout = 5 * 60 * 60; // 5 min
+        let proxy = self.connection.with_proxy(DBUS_DEST, path, DEFAULT_TIMEOUT);
+        let (tx, rx) = channel::<Result<Path<'static>>>();
+
+        let token = proxy
+            .match_signal(
+                move |signal: OrgFreedesktopSecretPromptCompleted, _: &Connection, _: &Message| {
+                    let result = if signal.dismissed {
+                        Err(Error::PromptDismissedError)
+                    } else if let Some(first) = signal.result.as_static_inner(0) {
+                        match cast::<Path<'_>>(first) {
+                            Some(path) => Ok(path.clone().into_static()),
+                            None => Err(Error::ParsePromptPathError),
+                        }
+                    } else {
+                        Err(Error::ParsePromptSignalError)
+                    };
+
+                    if let Err(err) = tx.send(result) {
+                        warn!(?err, "cannot send prompt result, exiting anyway")
+                    }
+
+                    false
+                },
+            )
+            .map_err(Error::PromptMatchSignalError)?;
+
+        proxy.prompt("").map_err(Error::PromptError)?;
+
+        let mut result = Err(Error::PromptTimeoutError);
+
+        for _ in 0..timeout {
+            match self.connection.process(Duration::from_secs(1)) {
+                Ok(false) => continue,
+                Ok(true) => match rx.try_recv() {
+                    Ok(res) => {
+                        result = res;
+                        break;
+                    }
+                    Err(TryRecvError::Empty) => continue,
+                    Err(TryRecvError::Disconnected) => break,
+                },
+                _ => break,
+            }
+        }
+
+        proxy
+            .match_stop(token, true)
+            .map_err(Error::PromptMatchStopError)?;
+
+        result
+    }
+}
 
 #[derive(Debug)]
 pub struct Collection<'a> {
@@ -235,14 +304,14 @@ impl<'a> Collection<'a> {
 
         let session = self.service.session.path.clone();
         let secret = (session, salt, secret, "text/plain");
-        let (item_path, _prompt_path) = self
+        let (item_path, prompt_path) = self
             .proxy()
             .create_item(props, secret, true)
             .map_err(Error::CreateItemError)?;
 
         let item_path = if item_path == Path::default() {
             // no creation path, so prompt
-            todo!()
+            self.service.prompt(&prompt_path)?
         } else {
             item_path
         };

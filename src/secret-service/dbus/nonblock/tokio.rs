@@ -173,14 +173,14 @@ impl SecretService {
                     Variant(Box::new(String::from("default")) as Box<dyn RefArg>),
                 )));
 
-                let (collection_path, _prompt_path) = proxy
+                let (collection_path, prompt_path) = proxy
                     .create_collection(props, "default")
                     .await
                     .map_err(Error::CreateDefaultCollectionError)?;
 
                 let collection_path = if collection_path == empty_path {
                     // no creation path, so prompt
-                    todo!()
+                    self.prompt(&prompt_path).await?
                 } else {
                     collection_path
                 };
@@ -188,6 +188,10 @@ impl SecretService {
                 Ok(Collection::new(self, collection_path))
             }
         }
+    }
+
+    async fn prompt(&self, _path: &Path<'static>) -> Result<Path<'static>> {
+        unimplemented!();
     }
 
     pub async fn disconnect(self) -> Result<()> {
@@ -270,7 +274,7 @@ impl<'a> Collection<'a> {
 
         let session = self.service.session.path.clone();
         let secret = (session, salt, secret, "text/plain");
-        let (item_path, _prompt_path) = self
+        let (item_path, prompt_path) = self
             .proxy()
             .create_item(props, secret, true)
             .await
@@ -278,7 +282,7 @@ impl<'a> Collection<'a> {
 
         let item_path = if item_path == Path::default() {
             // no creation path, so prompt
-            todo!()
+            self.service.prompt(&prompt_path).await?
         } else {
             item_path
         };
