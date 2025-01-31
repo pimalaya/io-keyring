@@ -1,0 +1,25 @@
+[package]
+name = "keyring-apple-keychain-std"
+description = "Standard, blocking Apple Keychain I/O connector for process-lib"
+version = "1.0.0"
+authors = ["soywod <clement.douin@posteo.net>"]
+edition = "2021"
+license = "MIT"
+categories = []
+keywords = ["credential", "keychain", "keyring", "apple-keychain", "std"]
+homepage = "https://pimalaya.org"
+documentation = "https://docs.rs/keyring-apple-keychain-std/latest/keyring_apple_keychain_std"
+repository = "https://github.com/pimalaya/keyring"
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dependencies]
+keyring-lib = "2"
+secrecy = "0.10"
+security-framework = { version = "3", default-features = false }
+thiserror = "2"
+tracing = "0.1"

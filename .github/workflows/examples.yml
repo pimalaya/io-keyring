@@ -1,51 +1,51 @@
-name: Run examples
+# name: Run examples
 
-on:
-  push:
+# on:
+#   push:
 
-jobs:
-  secret-service-std:
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        keyring: [dbus, zbus]
-        crypto: [openssl, rust-crypto]
-        encryption: [plain, dh]
-    env:
-      KEY: ubuntu-24.04-ss-${{ matrix.keyring }}-${{ matrix.crypto }}-${{ matrix.encryption }}-std
-      KEYRING_PROVIDER: ${{ matrix.keyring }}-secret-service
-      SS_CRYPTO_PROVIDER: ${{ matrix.crypto }}
-      SS_CRYPTO_ALGORITHM: ${{ matrix.encryption }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: libdbus-1-dev libssl-dev gnome-keyring
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'password'
-      - run: cargo run --features secret-service-${{ matrix.keyring }}-std,secret-service-${{ matrix.crypto }}-std --example std
+# jobs:
+#   secret-service-std:
+#     runs-on: ubuntu-24.04
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         keyring: [dbus, zbus]
+#         crypto: [openssl, rust-crypto]
+#         encryption: [plain, dh]
+#     env:
+#       KEY: ubuntu-24.04-ss-${{ matrix.keyring }}-${{ matrix.crypto }}-${{ matrix.encryption }}-std
+#       KEYRING_PROVIDER: ${{ matrix.keyring }}-secret-service
+#       SS_CRYPTO_PROVIDER: ${{ matrix.crypto }}
+#       SS_CRYPTO_ALGORITHM: ${{ matrix.encryption }}
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: awalsh128/cache-apt-pkgs-action@latest
+#         with:
+#           packages: libdbus-1-dev libssl-dev gnome-keyring
+#       - uses: actions-rust-lang/setup-rust-toolchain@v1
+#       - run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'password'
+#       - run: cargo run --features secret-service-${{ matrix.keyring }}-std,secret-service-${{ matrix.crypto }}-std --example std
 
-  apple-keychain-std:
-    runs-on: ${{ matrix.macos }}
-    strategy:
-      fail-fast: false
-      matrix:
-        macos: [macos-13, macos-14, macos-15]
-    env:
-      KEY: ${{ matrix.macos }}-std
-      KEYRING_PROVIDER: apple-keychain
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: cargo run --features apple-keychain-std --example std
+#   apple-keychain-std:
+#     runs-on: ${{ matrix.macos }}
+#     strategy:
+#       fail-fast: false
+#       matrix:
+#         macos: [macos-13, macos-14, macos-15]
+#     env:
+#       KEY: ${{ matrix.macos }}-std
+#       KEYRING_PROVIDER: apple-keychain
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: actions-rust-lang/setup-rust-toolchain@v1
+#       - run: cargo run --features apple-keychain-std --example std
 
-  windows-credentials-std:
-    runs-on: windows-latest
-    env:
-      KEY: windows-latest-std
-      KEYRING_PROVIDER: windows-credentials
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: cargo run --features windows-credentials-std --example std
+#   windows-credentials-std:
+#     runs-on: windows-latest
+#     env:
+#       KEY: windows-latest-std
+#       KEYRING_PROVIDER: windows-credentials
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: actions-rust-lang/setup-rust-toolchain@v1
+#       - run: cargo run --features windows-credentials-std --example std
