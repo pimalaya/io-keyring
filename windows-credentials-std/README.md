@@ -1,38 +1,8 @@
-# 🔐 keyring [![Matrix](https://img.shields.io/matrix/pimalaya:matrix.org?color=success&label=chat)](https://matrix.to/#/#pimalaya:matrix.org)
+# 🔐 keyring-windows-credentials-std [![Matrix](https://img.shields.io/matrix/pimalaya:matrix.org?color=success&label=chat)](https://matrix.to/#/#pimalaya:matrix.org)
 
-Set of Rust libraries to manage credentials from keyrings.
+Standard, blocking Windows Credentials I/O connector for `keyring-lib`.
 
-## Why?
-
-Designing a generic API for a library *that relies on I/O* is a real challenge. This project tries to solve that matter by abstracting away the I/O:
-
-- The core lib exposes I/O-free, composable and iterable state machines (named flows)
-- The I/O connector executes I/O everytime a flow `Iterator` produces an I/O request
-
-```rust
-let mut flow = Flow::new()
-let conn = IoConnector::new();
-
-while let Some(io) = flow.next() {
-    conn.execute(&mut flow, io)?;
-}
-
-let output = flow.output()
-```
-
-![sans-io](./sans-io.svg)
-
-## When?
-
-*TODO*
-
-## Structure
-
-*TODO*
-
-## Examples
-
-*TODO*
+*See the project documentation on [github.com](https://github.com/pimalaya/keyring#-keyring-), the full API documentation on [docs.rs](https://docs.rs/keyring-windows-credentials-std/latest/keyring_windows_credentials_std/) and examples at [`examples/`](https://github.com/pimalaya/keyring/tree/master/keyring-windows-credentials-std/examples).*
 
 ## Sponsoring
 
@@ -44,9 +14,7 @@ Special thanks to the [NLnet foundation](https://nlnet.nl/) and the [European Co
 - [NGI Zero Entrust](https://nlnet.nl/project/Pimalaya/) in 2023
 - [NGI Zero Core](https://nlnet.nl/project/Pimalaya-PIM/) in 2024 *(still ongoing)*
 
-All the credits go to [`keyring-rs`](https://github.com/hwchen/keyring-rs). The maintainers are doing a great job there, consider supporting them first.
-
-That said, if you appreciate this project, feel free to donate using one of the following providers:
+If you appreciate the project, feel free to donate using one of the following providers:
 
 [![GitHub](https://img.shields.io/badge/-GitHub%20Sponsors-fafbfc?logo=GitHub%20Sponsors)](https://github.com/sponsors/soywod)
 [![Ko-fi](https://img.shields.io/badge/-Ko--fi-ff5e5a?logo=Ko-fi&logoColor=ffffff)](https://ko-fi.com/soywod)
