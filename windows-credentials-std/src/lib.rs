@@ -1,8 +1,10 @@
 use std::{collections::HashMap, iter::once, mem::MaybeUninit, str, string::FromUtf16Error};
 
 use byteorder::{ByteOrder, LittleEndian};
+use keyring_lib::{Io, State};
 use secrecy::{ExposeSecret, SecretSlice, SecretString};
 use thiserror::Error;
+use tracing::instrument;
 use windows_sys::Win32::{
     Foundation::{
         GetLastError, ERROR_BAD_USERNAME, ERROR_INVALID_FLAGS, ERROR_INVALID_PARAMETER,
@@ -15,8 +17,6 @@ use windows_sys::Win32::{
         CRED_TYPE_GENERIC,
     },
 };
-
-use crate::sans_io::{GetKey, PutSecret, TakeSecret};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -60,6 +60,57 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Clone, Debug)]
+pub struct Connector {
+    service: String,
+}
+
+impl Connector {
+    #[instrument(skip_all)]
+    pub fn new(service: impl ToString) -> Self {
+        Self {
+            service: service.to_string(),
+        }
+    }
+
+    /// Executes the given `io` for the given `flow`.
+    #[instrument(skip_all)]
+    pub fn execute<F: AsMut<State>>(&self, flow: &mut F, io: Io) -> Result<()> {
+        let state = flow.as_mut();
+
+        match io {
+            Io::Read => self.read(state),
+            Io::Write => self.write(state),
+            Io::Delete => self.delete(state),
+        }
+    }
+
+    #[instrument(skip_all)]
+    pub fn read(&self, state: &mut State) -> Result<()> {
+        let key = state.get_key_ref();
+        let secret = WinCredential::try_new(&self.service, key)?.get_secret_string()?;
+        state.set_secret(secret);
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    pub fn write(&self, state: &mut State) -> Result<()> {
+        let secret = state.take_secret();
+        let secret = secret.ok_or(Error::WriteUndefinedSecretError)?;
+        let secret = secret.expose_secret();
+        let key = state.get_key_ref();
+        WinCredential::try_new(&self.service, key)?.set_secret_string(secret)?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    pub fn delete(&self, state: &mut State) -> Result<()> {
+        let key = state.get_key_ref();
+        WinCredential::try_new(&self.service, key)?.delete_entry()?;
+        Ok(())
+    }
+}
 
 /// The representation of a Windows Generic credential.
 ///
@@ -370,296 +421,3 @@ unsafe fn from_wstr(ws: *const u16) -> String {
     let slice = std::slice::from_raw_parts(ws, len);
     String::from_utf16_lossy(slice)
 }
-
-#[derive(Clone, Debug)]
-pub struct IoConnector {
-    service: String,
-}
-
-impl IoConnector {
-    pub fn new(service: impl ToString) -> Self {
-        Self {
-            service: service.to_string(),
-        }
-    }
-
-    pub fn read<F: GetKey + PutSecret>(&self, flow: &mut F) -> Result<()> {
-        let secret = WinCredential::try_new(&self.service, flow.get_key())?.get_secret_bytes()?;
-        flow.put_secret(secret);
-        Ok(())
-    }
-
-    pub fn write<F: GetKey + TakeSecret>(&self, flow: &mut F) -> Result<()> {
-        let secret = flow.take_secret().ok_or(Error::WriteUndefinedSecretError)?;
-        WinCredential::try_new(&self.service, flow.get_key())?.set_secret_bytes(secret)?;
-        Ok(())
-    }
-
-    pub fn delete<F: GetKey>(&self, flow: &mut F) -> Result<()> {
-        WinCredential::try_new(&self.service, flow.get_key())?.delete_entry()?;
-        Ok(())
-    }
-}
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     use crate::credential::CredentialPersistence;
-//     use crate::tests::{generate_random_string, generate_random_string_of_len};
-//     use crate::Entry;
-
-//     #[test]
-//     fn test_persistence() {
-//         assert!(matches!(
-//             default_credential_builder().persistence(),
-//             CredentialPersistence::UntilDelete
-//         ))
-//     }
-
-//     fn entry_new(service: &str, user: &str) -> Entry {
-//         crate::tests::entry_from_constructor(WinCredential::new_with_target, service, user)
-//     }
-
-//     #[test]
-//     fn test_bad_password() {
-//         fn make_platform_credential(password: &mut Vec<u8>) -> CREDENTIALW {
-//             let last_written = FILETIME {
-//                 dwLowDateTime: 0,
-//                 dwHighDateTime: 0,
-//             };
-//             let attribute_count = 0;
-//             let attributes: *mut CREDENTIAL_ATTRIBUTEW = std::ptr::null_mut();
-//             CREDENTIALW {
-//                 Flags: 0,
-//                 Type: CRED_TYPE_GENERIC,
-//                 TargetName: std::ptr::null_mut(),
-//                 Comment: std::ptr::null_mut(),
-//                 LastWritten: last_written,
-//                 CredentialBlobSize: password.len() as u32,
-//                 CredentialBlob: password.as_mut_ptr(),
-//                 Persist: CRED_PERSIST_ENTERPRISE,
-//                 AttributeCount: attribute_count,
-//                 Attributes: attributes,
-//                 TargetAlias: std::ptr::null_mut(),
-//                 UserName: std::ptr::null_mut(),
-//             }
-//         }
-//         // the first malformed sequence can't be UTF-16 because it has an odd number of bytes.
-//         // the second malformed sequence has a first surrogate marker (0xd800) without a matching
-//         // companion (it's taken from the String::fromUTF16 docs).
-//         let mut odd_bytes = b"1".to_vec();
-//         let malformed_utf16 = [0xD834, 0xDD1E, 0x006d, 0x0075, 0xD800, 0x0069, 0x0063];
-//         let mut malformed_bytes: Vec<u8> = vec![0; malformed_utf16.len() * 2];
-//         LittleEndian::write_u16_into(&malformed_utf16, &mut malformed_bytes);
-//         for bytes in [&mut odd_bytes, &mut malformed_bytes] {
-//             let credential = make_platform_credential(bytes);
-//             match extract_password(&credential) {
-//                 Err(ErrorCode::BadEncoding(str)) => assert_eq!(&str, bytes),
-//                 Err(other) => panic!("Bad password ({bytes:?}) decode gave wrong error: {other}"),
-//                 Ok(s) => panic!("Bad password ({bytes:?}) decode gave results: {s:?}"),
-//             }
-//         }
-//     }
-
-//     #[test]
-//     fn test_validate_attributes() {
-//         fn validate_attribute_too_long(result: Result<()>, attr: &str, len: u32) {
-//             match result {
-//                 Err(ErrorCode::TooLong(arg, val)) => {
-//                     if attr == "password" {
-//                         assert_eq!(
-//                             &arg, "password encoded as UTF-16",
-//                             "Error names wrong attribute"
-//                         );
-//                     } else {
-//                         assert_eq!(&arg, attr, "Error names wrong attribute");
-//                     }
-//                     assert_eq!(val, len, "Error names wrong limit");
-//                 }
-//                 Err(other) => panic!("Error is not '{attr} too long': {other}"),
-//                 Ok(_) => panic!("No error when {attr} too long"),
-//             }
-//         }
-//         let cred = WinCredential {
-//             username: "username".to_string(),
-//             target_name: "target_name".to_string(),
-//             target_alias: "target_alias".to_string(),
-//             comment: "comment".to_string(),
-//         };
-//         for (attr, len) in [
-//             ("user", CRED_MAX_USERNAME_LENGTH),
-//             ("target", CRED_MAX_GENERIC_TARGET_NAME_LENGTH),
-//             ("target alias", CRED_MAX_STRING_LENGTH),
-//             ("comment", CRED_MAX_STRING_LENGTH),
-//             ("password", CRED_MAX_CREDENTIAL_BLOB_SIZE),
-//             ("secret", CRED_MAX_CREDENTIAL_BLOB_SIZE),
-//         ] {
-//             let long_string = generate_random_string_of_len(1 + len as usize);
-//             let mut bad_cred = cred.clone();
-//             match attr {
-//                 "user" => bad_cred.username = long_string.clone(),
-//                 "target" => bad_cred.target_name = long_string.clone(),
-//                 "target alias" => bad_cred.target_alias = long_string.clone(),
-//                 "comment" => bad_cred.comment = long_string.clone(),
-//                 _ => (),
-//             }
-//             let validate = |r| validate_attribute_too_long(r, attr, len);
-//             match attr {
-//                 "password" => {
-//                     let password = generate_random_string_of_len((len / 2) as usize + 1);
-//                     validate(bad_cred.validate_attributes(None, Some(&password)))
-//                 }
-//                 "secret" => {
-//                     let secret: Vec<u8> = vec![255u8; len as usize + 1];
-//                     validate(bad_cred.validate_attributes(Some(&secret), None))
-//                 }
-//                 _ => validate(bad_cred.validate_attributes(None, None)),
-//             }
-//         }
-//     }
-
-//     #[test]
-//     fn test_password_valid_only_after_conversion_to_utf16() {
-//         let cred = WinCredential {
-//             username: "username".to_string(),
-//             target_name: "target_name".to_string(),
-//             target_alias: "target_alias".to_string(),
-//             comment: "comment".to_string(),
-//         };
-
-//         let len = CRED_MAX_CREDENTIAL_BLOB_SIZE / 2;
-//         let password: String = (0..len).map(|_| "笑").collect();
-
-//         assert!(password.len() > CRED_MAX_CREDENTIAL_BLOB_SIZE as usize);
-//         cred.validate_attributes(None, Some(&password))
-//             .expect("Password of appropriate length in UTF16 was invalid");
-//     }
-
-//     #[test]
-//     fn test_invalid_parameter() {
-//         let credential = WinCredential::new_with_target(Some(""), "service", "user");
-//         assert!(
-//             matches!(credential, Err(ErrorCode::Invalid(_, _))),
-//             "Created entry with empty target"
-//         );
-//     }
-
-//     #[test]
-//     fn test_empty_service_and_user() {
-//         crate::tests::test_empty_service_and_user(entry_new);
-//     }
-
-//     #[test]
-//     fn test_missing_entry() {
-//         crate::tests::test_missing_entry(entry_new);
-//     }
-
-//     #[test]
-//     fn test_empty_password() {
-//         crate::tests::test_empty_password(entry_new);
-//     }
-
-//     #[test]
-//     fn test_round_trip_ascii_password() {
-//         crate::tests::test_round_trip_ascii_password(entry_new);
-//     }
-
-//     #[test]
-//     fn test_round_trip_non_ascii_password() {
-//         crate::tests::test_round_trip_non_ascii_password(entry_new);
-//     }
-
-//     #[test]
-//     fn test_round_trip_random_secret() {
-//         crate::tests::test_round_trip_random_secret(entry_new);
-//     }
-
-//     #[test]
-//     fn test_update() {
-//         crate::tests::test_update(entry_new);
-//     }
-
-//     #[test]
-//     fn test_get_update_attributes() {
-//         let name = generate_random_string();
-//         let cred = WinCredential::new_with_target(None, &name, &name)
-//             .expect("Can't create credential for attribute test");
-//         let entry = Entry::new_with_credential(Box::new(cred.clone()));
-//         assert!(
-//             matches!(entry.get_attributes(), Err(ErrorCode::NoEntry)),
-//             "Read missing credential in attribute test",
-//         );
-//         let mut in_map: HashMap<&str, &str> = HashMap::new();
-//         in_map.insert("label", "ignored label value");
-//         in_map.insert("attribute name", "ignored attribute value");
-//         in_map.insert("target_alias", "target alias value");
-//         in_map.insert("comment", "comment value");
-//         in_map.insert("username", "username value");
-//         assert!(
-//             matches!(entry.update_attributes(&in_map), Err(ErrorCode::NoEntry)),
-//             "Updated missing credential in attribute test",
-//         );
-//         // create the credential and test again
-//         entry
-//             .set_password("test password for attributes")
-//             .unwrap_or_else(|err| panic!("Can't set password for attribute test: {err:?}"));
-//         let out_map = entry
-//             .get_attributes()
-//             .expect("Can't get attributes after create");
-//         assert_eq!(out_map["target_alias"], cred.target_alias);
-//         assert_eq!(out_map["comment"], cred.comment);
-//         assert_eq!(out_map["username"], cred.username);
-//         assert!(
-//             matches!(entry.update_attributes(&in_map), Ok(())),
-//             "Couldn't update attributes in attribute test",
-//         );
-//         let after_map = entry
-//             .get_attributes()
-//             .expect("Can't get attributes after update");
-//         assert_eq!(after_map["target_alias"], in_map["target_alias"]);
-//         assert_eq!(after_map["comment"], in_map["comment"]);
-//         assert_eq!(after_map["username"], in_map["username"]);
-//         assert!(!after_map.contains_key("label"));
-//         assert!(!after_map.contains_key("attribute name"));
-//         entry
-//             .delete_credential()
-//             .unwrap_or_else(|err| panic!("Can't delete credential for attribute test: {err:?}"));
-//         assert!(
-//             matches!(entry.get_attributes(), Err(ErrorCode::NoEntry)),
-//             "Read deleted credential in attribute test",
-//         );
-//     }
-
-//     #[test]
-//     fn test_get_credential() {
-//         let name = generate_random_string();
-//         let entry = entry_new(&name, &name);
-//         let password = "test get password";
-//         entry
-//             .set_password(password)
-//             .expect("Can't set test get password");
-//         let credential: &WinCredential = entry
-//             .get_credential()
-//             .downcast_ref()
-//             .expect("Not a windows credential");
-//         let actual = credential.get_credential().expect("Can't read credential");
-//         assert_eq!(
-//             actual.username, credential.username,
-//             "Usernames don't match"
-//         );
-//         assert_eq!(
-//             actual.target_name, credential.target_name,
-//             "Target names don't match"
-//         );
-//         assert_eq!(
-//             actual.target_alias, credential.target_alias,
-//             "Target aliases don't match"
-//         );
-//         assert_eq!(actual.comment, credential.comment, "Comments don't match");
-//         entry
-//             .delete_credential()
-//             .expect("Couldn't delete get-credential");
-//         assert!(matches!(entry.get_password(), Err(ErrorCode::NoEntry)));
-//     }
-// }

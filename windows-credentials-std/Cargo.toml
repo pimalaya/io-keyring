@@ -1,0 +1,26 @@
+[package]
+name = "keyring-windows-credentials-std"
+description = "Standard, blocking Windows Credentials I/O connector for process-lib"
+version = "1.0.0"
+authors = ["soywod <clement.douin@posteo.net>"]
+edition = "2021"
+license = "MIT"
+categories = []
+keywords = ["credential", "keychain", "keyring", "windows-credentials", "std"]
+homepage = "https://pimalaya.org"
+documentation = "https://docs.rs/keyring-windows-credentials-std/latest/keyring_windows_credentials_std"
+repository = "https://github.com/pimalaya/keyring"
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dependencies]
+byteorder = "1.2"
+keyring-lib = "2"
+secrecy = "0.10"
+thiserror = "2"
+tracing = "0.1"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
