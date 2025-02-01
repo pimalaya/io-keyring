@@ -70,7 +70,7 @@ impl Connector {
             .get_default_collection()?
             .get_item(&self.service, state.get_key())?
             .delete()?;
-
+        state.set_delete_done();
         Ok(())
     }
 }

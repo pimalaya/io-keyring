@@ -45,8 +45,7 @@ jobs:
           name: soywod
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
           extraPullNames: nix-community
-      - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: libdbus-1-dev libssl-dev gnome-keyring
-      - run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'password'
-      - run: nix-shell --run "cargo run -p keyring-secret-service-dbus-std --example entry"
+      - run: |
+          nix-shell \
+            --argstr extraBuildInputs dbus,gnome-keyring,openssl \
+            --run "gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'password'; cargo run -p keyring-secret-service-dbus-std --example entry"
