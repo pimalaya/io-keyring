@@ -1,0 +1,30 @@
+[package]
+name = "keyring-secret-service-dbus-std"
+description = "Standard, blocking I/O connector for process-lib based on D-Bus Secret Service"
+version = "1.0.0"
+authors = ["soywod <clement.douin@posteo.net>"]
+edition = "2021"
+license = "MIT"
+categories = []
+keywords = ["credential", "keyring", "secret-service", "dbus", "std"]
+homepage = "https://pimalaya.org"
+documentation = "https://docs.rs/keyring-secret-service-dbus-std/latest/keyring_secret_service_dbus_std"
+repository = "https://github.com/pimalaya/keyring"
+
+[features]
+default = []
+encryption = ["keyring-secret-service-lib/encryption"]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dependencies]
+dbus = "0.9"
+keyring-lib = "2"
+keyring-secret-service-lib = { version = "1", default-features = false, features = ["blocking"] }
+secrecy = "0.10"
+thiserror = "2"
+tracing = "0.1"

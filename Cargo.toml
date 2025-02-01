@@ -1,8 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["lib", "apple-keychain-std", "windows-credentials-std"]
+members = ["lib", "apple-keychain-std", "windows-credentials-std", "secret-service-lib", "secret-service-dbus-std"]
 
 [patch.crates-io]
 keyring-lib.path = "./lib"
 keyring-apple-keychain-std.path = "./apple-keychain-std"
 keyring-windows-credentials-std.path = "./windows-credentials-std"
+keyring-secret-service-lib.path = "./secret-service-lib"
+keyring-secret-service-dbus-std.path = "./secret-service-dbus-std"

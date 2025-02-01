@@ -13,11 +13,7 @@ pub struct DeleteEntry {
 impl DeleteEntry {
     pub fn new(key: impl ToString) -> Self {
         Self {
-            state: State {
-                key: key.to_string(),
-                secret: None,
-                deleted: false,
-            },
+            state: State::delete(key),
         }
     }
 

@@ -1,8 +1,8 @@
 use std::fmt;
 
-#[cfg(feature = "secret-service-crypto")]
-use crate::secret_service::crypto::sans_io::dh;
-use crate::secret_service::crypto::sans_io::Algorithm;
+#[cfg(feature = "encryption")]
+use crate::crypto::dh;
+use crate::crypto::Algorithm;
 
 pub struct Session<P> {
     pub path: P,
@@ -19,7 +19,7 @@ impl<P> Session<P> {
         }
     }
 
-    #[cfg(feature = "secret-service-crypto")]
+    #[cfg(feature = "encryption")]
     pub fn new_dh(path: P, keypair: dh::Keypair, output: Vec<u8>) -> Self {
         Self {
             path,

@@ -1,0 +1,36 @@
+[package]
+name = "keyring-secret-service-lib"
+description = "I/O-free library to manage Secret Service based credentials"
+version = "1.0.0"
+authors = ["soywod <clement.douin@posteo.net>"]
+edition = "2021"
+license = "MIT"
+categories = []
+keywords = ["credential", "keyring", "secret-service", "io-free", "sans-io"]
+homepage = "https://pimalaya.org"
+documentation = "https://docs.rs/keyring-secret-service-lib/latest/keyring_secret_service_lib"
+repository = "https://github.com/pimalaya/keyring"
+
+[features]
+default = ["blocking"]
+blocking = ["dep:dbus-codegen"]
+nonblock = ["dep:dbus-codegen", "dbus/futures"]
+encryption = ["dep:num", "dep:once_cell", "dep:rand"]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[build-dependencies]
+dbus-codegen = { version = "0.12", default-features = false, optional = true }
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dependencies]
+dbus = "0.9"
+keyring-lib = "2"
+num = { version = "0.4", optional = true }
+once_cell = { version = "1", optional = true }
+rand = { version = "0.8", optional = true }
+secrecy = "0.10"
+tracing = "0.1"

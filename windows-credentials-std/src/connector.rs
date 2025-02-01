@@ -40,7 +40,7 @@ impl Connector {
 
     #[instrument(skip_all)]
     pub fn read(&self, state: &mut State) -> Result<()> {
-        let key = state.get_key_ref();
+        let key = state.get_key();
         let cred = Credential::try_new(&self.service, key)?;
         let secret = cred.get_secret_string()?;
         state.set_secret(secret);
@@ -52,14 +52,14 @@ impl Connector {
         let secret = state.take_secret();
         let secret = secret.ok_or(Error::WriteUndefinedSecretError)?;
         let secret = secret.expose_secret();
-        let key = state.get_key_ref();
+        let key = state.get_key();
         let cred = Credential::try_new(&self.service, key)?;
         cred.set_secret_string(secret)
     }
 
     #[instrument(skip_all)]
     pub fn delete(&self, state: &mut State) -> Result<()> {
-        let key = state.get_key_ref();
+        let key = state.get_key();
         let cred = Credential::try_new(&self.service, key)?;
         cred.delete_entry()?;
         state.set_delete_done();

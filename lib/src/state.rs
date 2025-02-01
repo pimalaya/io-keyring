@@ -18,14 +18,33 @@ pub struct State {
 }
 
 impl State {
-    /// Returns a reference to the inner key.
-    pub fn get_key_ref(&self) -> &str {
-        self.key.as_str()
+    pub fn read(key: impl ToString) -> Self {
+        Self {
+            key: key.to_string(),
+            secret: None,
+            deleted: false,
+        }
     }
 
-    /// Puts the given secret into the inner I/O state.
-    pub fn set_secret(&mut self, secret: impl Into<SecretString>) {
-        self.secret = Some(secret.into());
+    pub fn write(key: impl ToString, secret: impl Into<SecretString>) -> Self {
+        Self {
+            key: key.to_string(),
+            secret: Some(secret.into()),
+            deleted: false,
+        }
+    }
+
+    pub fn delete(key: impl ToString) -> Self {
+        Self {
+            key: key.to_string(),
+            secret: None,
+            deleted: false,
+        }
+    }
+
+    /// Returns a reference to the inner key.
+    pub fn get_key(&self) -> &str {
+        self.key.as_str()
     }
 
     /// Takes the secret away from the inner I/O state.
@@ -33,13 +52,18 @@ impl State {
         self.secret.take()
     }
 
-    /// Marks the current secret as deleted.
-    pub fn set_delete_done(&mut self) {
-        self.deleted = true;
+    /// Puts the given secret into the inner I/O state.
+    pub fn set_secret(&mut self, secret: impl Into<SecretString>) {
+        self.secret = Some(secret.into());
     }
 
     /// Takes the deleted flag away from the inner I/O state.
     pub fn is_deleted(&self) -> bool {
         self.deleted
+    }
+
+    /// Marks the current secret as deleted.
+    pub fn set_delete_done(&mut self) {
+        self.deleted = true;
     }
 }

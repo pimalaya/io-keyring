@@ -16,7 +16,11 @@ impl WriteEntry {
     /// Creates a new flow from the given keyring entry key.
     pub fn new(key: impl ToString, secret: impl Into<SecretString>) -> Self {
         Self {
-            state: State::write(key, secret),
+            state: State {
+                key: key.to_string(),
+                secret: Some(secret.into()),
+                deleted: false,
+            },
         }
     }
 }

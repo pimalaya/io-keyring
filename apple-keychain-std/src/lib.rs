@@ -1,3 +1,6 @@
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+
 use std::string::FromUtf8Error;
 
 use keyring_lib::{Io, State};
@@ -51,7 +54,7 @@ impl Connector {
 
     #[instrument(skip_all)]
     pub fn read(&self, state: &mut State) -> Result<()> {
-        let key = state.get_key_ref();
+        let key = state.get_key();
         let secret = get_generic_password(&self.service, key).map_err(Error::ReadSecretError)?;
         let secret = String::from_utf8(secret).map_err(Error::ConvertSecretAsUtf8Error)?;
         state.set_secret(secret);
@@ -63,13 +66,13 @@ impl Connector {
         let secret = state.take_secret();
         let secret = secret.ok_or(Error::WriteUndefinedSecretError)?;
         let secret = secret.expose_secret().as_bytes();
-        let key = state.get_key_ref();
+        let key = state.get_key();
         set_generic_password(&self.service, key, secret).map_err(Error::WriteSecretError)
     }
 
     #[instrument(skip_all)]
     pub fn delete(&self, state: &mut State) -> Result<()> {
-        let key = state.get_key_ref();
+        let key = state.get_key();
         println!("delete key: {key:?}");
         delete_generic_password(&self.service, key).map_err(Error::DeleteSecretError)?;
         state.set_delete_done();
