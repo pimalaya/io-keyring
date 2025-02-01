@@ -84,6 +84,7 @@ impl Credential {
 
     pub fn get_secret_string(&self) -> Result<SecretString> {
         let mut p_credential = MaybeUninit::uninit();
+
         // at this point, p_credential is just a pointer to nowhere.
         // The allocation happens in the `CredReadW` call below.
         let result = {
@@ -98,6 +99,7 @@ impl Credential {
                 )
             }
         };
+
         match result {
             0 => {
                 // `CredReadW` failed, so no allocation has been done, so no free needs to be done

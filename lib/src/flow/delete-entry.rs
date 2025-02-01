@@ -16,9 +16,14 @@ impl DeleteEntry {
             state: State {
                 key: key.to_string(),
                 secret: None,
-                deleted: None,
+                deleted: false,
             },
         }
+    }
+
+    /// Takes the deleted flag away from the inner I/O state.
+    pub fn is_deleted(&self) -> bool {
+        self.state.is_deleted()
     }
 }
 
@@ -32,10 +37,10 @@ impl Iterator for DeleteEntry {
     type Item = Io;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let None = self.state.deleted {
-            Some(Io::Delete)
-        } else {
+        if self.state.is_deleted() {
             None
+        } else {
+            Some(Io::Delete)
         }
     }
 }

@@ -19,7 +19,7 @@ impl WriteEntry {
             state: State {
                 key: key.to_string(),
                 secret: Some(secret.into()),
-                deleted: None,
+                deleted: false,
             },
         }
     }

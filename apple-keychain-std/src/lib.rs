@@ -63,13 +63,16 @@ impl Connector {
         let secret = state.take_secret();
         let secret = secret.ok_or(Error::WriteUndefinedSecretError)?;
         let secret = secret.expose_secret().as_bytes();
-        set_generic_password(&self.service, state.get_key_ref(), secret)
-            .map_err(Error::WriteSecretError)
+        let key = state.get_key_ref();
+        set_generic_password(&self.service, key, secret).map_err(Error::WriteSecretError)
     }
 
     #[instrument(skip_all)]
     pub fn delete(&self, state: &mut State) -> Result<()> {
         let key = state.get_key_ref();
-        delete_generic_password(&self.service, key).map_err(Error::DeleteSecretError)
+        println!("delete key: {key:?}");
+        delete_generic_password(&self.service, key).map_err(Error::DeleteSecretError)?;
+        state.set_delete_done();
+        Ok(())
     }
 }

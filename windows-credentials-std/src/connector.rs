@@ -43,7 +43,6 @@ impl Connector {
         let key = state.get_key_ref();
         let cred = Credential::try_new(&self.service, key)?;
         let secret = cred.get_secret_string()?;
-
         state.set_secret(secret);
         Ok(())
     }
@@ -55,7 +54,6 @@ impl Connector {
         let secret = secret.expose_secret();
         let key = state.get_key_ref();
         let cred = Credential::try_new(&self.service, key)?;
-
         cred.set_secret_string(secret)
     }
 
@@ -63,6 +61,8 @@ impl Connector {
     pub fn delete(&self, state: &mut State) -> Result<()> {
         let key = state.get_key_ref();
         let cred = Credential::try_new(&self.service, key)?;
-        cred.delete_entry()
+        cred.delete_entry()?;
+        state.set_delete_done();
+        Ok(())
     }
 }

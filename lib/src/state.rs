@@ -14,7 +14,7 @@ pub struct State {
     pub(crate) secret: Option<SecretString>,
 
     /// The deleted flag output.
-    pub(crate) deleted: Option<()>,
+    pub(crate) deleted: bool,
 }
 
 impl State {
@@ -34,12 +34,12 @@ impl State {
     }
 
     /// Marks the current secret as deleted.
-    pub fn set_deleted(&mut self) {
-        self.deleted = Some(());
+    pub fn set_delete_done(&mut self) {
+        self.deleted = true;
     }
 
     /// Takes the deleted flag away from the inner I/O state.
-    pub fn take_deleted(&mut self) -> Option<()> {
-        self.deleted.take()
+    pub fn is_deleted(&self) -> bool {
+        self.deleted
     }
 }

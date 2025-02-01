@@ -19,7 +19,7 @@ impl ReadEntry {
             state: State {
                 key: key.to_string(),
                 secret: None,
-                deleted: None,
+                deleted: false,
             },
         }
     }
