@@ -12,7 +12,7 @@ documentation = "https://docs.rs/keyring-secret-service-lib/latest/keyring_secre
 repository = "https://github.com/pimalaya/keyring"
 
 [features]
-default = ["blocking"]
+default = ["blocking", "encryption"]
 blocking = ["dep:dbus-codegen"]
 nonblock = ["dep:dbus-codegen", "dbus/futures"]
 encryption = ["dep:num", "dep:once_cell", "dep:rand"]

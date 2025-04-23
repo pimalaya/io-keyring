@@ -38,9 +38,13 @@ impl Iterator for ReadEntry {
     type Item = Io;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let Algorithm::Dh(_) = &self.encryption {}
+
         let Some(secret) = self.state.keyring.take_secret() else {
             return None;
         };
+
+        if let Algorithm::Dh(_) = &self.encryption {}
 
         self.state.crypto.set_salt(next_salt);
 

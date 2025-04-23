@@ -1,7 +1,4 @@
-use std::{
-    mem,
-    task::{ready, Poll},
-};
+use std::task::Poll;
 
 use secrecy::SecretString;
 
@@ -11,55 +8,37 @@ use super::dh::AesKey;
 pub enum State {
     None,
     Encrypt {
+        /// The shared key used for encryption
+        shared_key: AesKey,
         /// The secret to encrypt, as input
         secret: Poll<SecretString>,
-        /// The shared key used for encryption, as input
-        shared_key: Poll<AesKey>,
         /// The encrypted secret, as output
         cypher: Poll<Vec<u8>>,
     },
     Decrypt {
+        /// The shared key used for decryption
+        shared_key: AesKey,
         /// The encrypted secret to decrypt, as input
         cypher: Poll<Vec<u8>>,
-        /// The shared key used for decryption, as input
-        shared_key: Poll<AesKey>,
         /// The secret to encrypt, as output
         secret: Poll<SecretString>,
     },
 }
 
 impl State {
-    pub fn encrypt() -> Self {
+    pub fn encrypt(shared_key: AesKey) -> Self {
         Self::Encrypt {
+            shared_key,
             secret: Poll::Pending,
-            shared_key: Poll::Pending,
             cypher: Poll::Pending,
         }
     }
 
-    pub fn decrypt() -> Self {
+    pub fn decript(shared_key: AesKey) -> Self {
         Self::Decrypt {
+            shared_key,
             cypher: Poll::Pending,
-            shared_key: Poll::Pending,
             secret: Poll::Pending,
-        }
-    }
-
-    pub fn get_shared_key(&self) -> Poll<&AesKey> {
-        let key = ready!(match self {
-            Self::None => return Poll::Pending,
-            Self::Encrypt { shared_key, .. } => shared_key,
-            Self::Decrypt { shared_key, .. } => shared_key,
-        });
-
-        Poll::Ready(key)
-    }
-
-    pub fn set_shared_key(&mut self, key: AesKey) {
-        match self {
-            Self::None => (),
-            Self::Encrypt { shared_key, .. } => *shared_key = Poll::Ready(key),
-            Self::Decrypt { shared_key, .. } => *shared_key = Poll::Ready(key),
         }
     }
 }

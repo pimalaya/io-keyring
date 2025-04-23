@@ -12,7 +12,7 @@ impl State {
             keyring: keyring_lib::State::read(key),
             crypto: match encryption {
                 Algorithm::Plain => crypto::State::None,
-                Algorithm::Dh(_) => crypto::State::encrypt(),
+                Algorithm::Dh(_) => crypto::State::decrypt(),
             },
         }
     }
