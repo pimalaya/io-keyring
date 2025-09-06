@@ -27,48 +27,69 @@ The loop is the glue between coroutines and runtimes. It makes the coroutine pro
 ### Read secret from entry synchronously
 
 ```rust,ignore
-use io_keyring::{coroutines::Read, handlers::std::handle};
+use io_keyring::{
+    coroutines::read::{ReadSecret, ReadSecretResult},
+    entry::KeyringEntry,
+    handlers::std::handle,
+};
 
-let entry = Entry::new("name").service("example");
+let entry = KeyringEntry::new("name").with_service("example");
 
 let mut arg = None;
-let mut read = Read::new(entry.clone());
+let mut read = ReadSecret::new(entry);
 
 let secret = loop {
-    match read.resume(arg) {
-        Ok(secret) => break secret,
-        Err(io) => arg = Some(handle(io).unwrap()),
+    match read.resume(arg.take()) {
+        ReadSecretResult::Ok(secret) => break secret,
+        ReadSecretResult::Io(io) => arg = Some(handle(io).unwrap()),
+        ReadSecretResult::Err(err) => panic!("{err}"),
     }
-};
+}
 ```
 
 ### Write secret into entry synchronously
 
 ```rust,ignore
-use io_keyring::{coroutines::Write, handlers::std::handle};
+use io_keyring::{
+    coroutines::write::{WriteSecret, WriteSecretResult},
+    entry::KeyringEntry,
+    handlers::std::handle,
+};
 
-let entry = Entry::new("name").service("example");
+let entry = KeyringEntry::new("name").with_service("example");
 
 let mut arg = None;
-let mut write = Write::new(entry, "password");
+let mut write = WriteSecret::new(entry, "password");
 
-while let Err(io) = write.resume(arg) {
-    arg = Some(handle(io).unwrap());
+loop {
+    match write.resume(arg.take()) {
+        WriteSecretResult::Ok(()) => break,
+        WriteSecretResult::Io(io) => arg = Some(handle(io).unwrap()),
+        WriteSecretResult::Err(err) => panic!("{err}"),
+    }
 }
 ```
 
 ### Delete secret from entry synchronously
 
 ```rust,ignore
-use io_keyring::{coroutines::Delete, handlers::std::handle};
+use io_keyring::{
+    coroutines::delete::{DeleteSecret, DeleteSecretResult},
+    entry::KeyringEntry,
+    handlers::std::handle,
+};
 
 let entry = Entry::new("name").service("example");
 
 let mut arg = None;
-let mut Delete = Delete::new(entry);
+let mut delete = DeleteSecret::new(entry);
 
-while let Err(io) = delete.resume(arg) {
-    arg = Some(handle(io).unwrap());
+loop {
+    match delete.resume(arg.take()) {
+        DeleteSecretResult::Ok(()) => break,
+        DeleteSecretResult::Io(io) => arg = Some(handle(io).unwrap()),
+        DeleteSecretResult::Err(err) => panic!("{err}"),
+    }
 }
 ```
 
