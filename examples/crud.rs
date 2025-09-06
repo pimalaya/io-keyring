@@ -2,13 +2,17 @@
 
 use std::{
     env,
-    io::{stdin, stdout, Write as _},
+    io::{stdin, stdout, Write},
 };
 
 use io_keyring::{
-    coroutines::{Delete, Read, Write},
+    coroutines::{
+        delete::{DeleteSecret, DeleteSecretResult},
+        read::{ReadSecret, ReadSecretResult},
+        write::{WriteSecret, WriteSecretResult},
+    },
+    entry::KeyringEntry,
     runtimes::std::handle,
-    Entry,
 };
 use secrecy::ExposeSecret;
 
@@ -30,18 +34,19 @@ fn main() {
         Err(_) => read_line("Keyring entry password?"),
     };
 
-    let entry = Entry::new(name).service(service);
+    let entry = KeyringEntry::new(name).with_service(service);
 
     let mut arg = None;
-    let mut read = Read::new(entry.clone());
+    let mut read = ReadSecret::new(entry.clone());
 
     let secret = loop {
         match read.resume(arg.take()) {
-            Ok(secret) => break Ok(secret),
-            Err(io) => match handle(io) {
+            ReadSecretResult::Ok(secret) => break Ok(secret),
+            ReadSecretResult::Io(io) => match handle(io) {
                 Ok(io) => arg = Some(io),
                 Err(err) => break Err(err),
             },
+            ReadSecretResult::Err(err) => panic!("{err}"),
         }
     };
 
@@ -50,19 +55,24 @@ fn main() {
     println!("store new password");
 
     let mut arg = None;
-    let mut write = Write::new(entry.clone(), password);
+    let mut write = WriteSecret::new(entry.clone(), password);
 
-    while let Err(io) = write.resume(arg) {
-        arg = Some(handle(io).unwrap());
+    loop {
+        match write.resume(arg.take()) {
+            WriteSecretResult::Ok(()) => break,
+            WriteSecretResult::Io(io) => arg = Some(handle(io).unwrap()),
+            WriteSecretResult::Err(err) => panic!("{err}"),
+        }
     }
 
     let mut arg = None;
-    let mut read = Read::new(entry.clone());
+    let mut read = ReadSecret::new(entry.clone());
 
     let secret = loop {
-        match read.resume(arg) {
-            Ok(secret) => break secret,
-            Err(io) => arg = Some(handle(io).unwrap()),
+        match read.resume(arg.take()) {
+            ReadSecretResult::Ok(secret) => break secret,
+            ReadSecretResult::Io(io) => arg = Some(handle(io).unwrap()),
+            ReadSecretResult::Err(err) => panic!("{err}"),
         }
     };
 
@@ -71,22 +81,23 @@ fn main() {
     println!("delete entry");
 
     let mut arg = None;
-    let mut delete = Delete::new(entry.clone());
+    let mut delete = DeleteSecret::new(entry.clone());
 
-    while let Err(io) = delete.resume(arg) {
+    while let DeleteSecretResult::Io(io) = delete.resume(arg) {
         arg = Some(handle(io).unwrap());
     }
 
     let mut arg = None;
-    let mut read = Read::new(entry);
+    let mut read = ReadSecret::new(entry);
 
     let secret = loop {
         match read.resume(arg.take()) {
-            Ok(secret) => break Ok(secret),
-            Err(io) => match handle(io) {
+            ReadSecretResult::Ok(secret) => break Ok(secret),
+            ReadSecretResult::Io(io) => match handle(io) {
                 Ok(io) => arg = Some(io),
                 Err(err) => break Err(err),
             },
+            ReadSecretResult::Err(err) => panic!("{err}"),
         }
     };
 

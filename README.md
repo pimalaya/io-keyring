@@ -76,7 +76,16 @@ while let Err(io) = delete.resume(arg) {
 
 Have a look at projects built on the top of this library:
 
-- *TODO*
+- [Ortie](https://github.com/pimalaya/ortie): CLI to manage OAuth access tokens
+
+## License
+
+This project is licensed under either of:
+
+- [MIT license](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+
+at your option.
 
 ## Sponsoring
 

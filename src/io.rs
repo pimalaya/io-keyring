@@ -1,8 +1,8 @@
-use std::fmt;
+//! Keyring I/O requests and responses.
 
 use secrecy::SecretString;
 
-use crate::Entry;
+use crate::entry::KeyringEntry;
 
 /// The keyring I/O request enum, emitted by [coroutines] and
 /// processed by [runtimes].
@@ -13,23 +13,25 @@ use crate::Entry;
 /// [coroutines]: crate::coroutines
 /// [runtimes]: crate::runtimes
 #[derive(Clone, Debug)]
-pub enum Io {
-    /// Generic error related to coroutine progression.
-    Error(String),
-
+pub enum KeyringIo {
     /// I/O for reading a secret from a keyring entry.
-    Read(Result<SecretString, Entry>),
+    ///
+    /// Input: keyring entry
+    ///
+    /// Output: secret string
+    Read(Result<SecretString, KeyringEntry>),
 
     /// I/O for saving a keyring entry secret.
-    Write(Result<(), (Entry, SecretString)>),
+    ///
+    /// Input: keyring entry with secret string
+    ///
+    /// Output: none
+    Write(Result<(), (KeyringEntry, SecretString)>),
 
     /// I/O for deleting a keyring entry.
-    Delete(Result<(), Entry>),
-}
-
-impl Io {
-    pub fn err(msg: impl fmt::Display) -> Io {
-        let msg = format!("Keyring error: {msg}");
-        Io::Error(msg)
-    }
+    ///
+    /// Input: keyring entry
+    ///
+    /// Output: none
+    Delete(Result<(), KeyringEntry>),
 }

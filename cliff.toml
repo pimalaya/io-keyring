@@ -30,7 +30,7 @@ footer = """
                     /compare/{{ release.previous.version }}..{{ release.version }}
         {% endif -%}
     {% else -%}
-        [unreleased]: https://github.com/pimalaya/-iokeyring\
+        [unreleased]: https://github.com/pimalaya/io-keyring\
             /compare/{{ release.previous.version }}..HEAD
     {% endif -%}
 {% endfor %}

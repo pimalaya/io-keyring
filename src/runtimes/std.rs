@@ -1,59 +1,53 @@
-//! Module dedicated to the standard, blocking keyring I/O handler.
+//! The standard, blocking keyring runtime.
 
+use keyring::{Entry, Error};
 use secrecy::{ExposeSecret, SecretString};
-use thiserror::Error;
 
-use crate::{Entry, Io};
+use crate::{entry::KeyringEntry, io::KeyringIo};
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("{0}")]
-    Other(String),
-    #[error(transparent)]
-    Keyring(#[from] keyring::Error),
-}
-
-/// The standard, blocking keyring I/O handler.
-pub fn handle(io: Io) -> Result<Io, Error> {
+/// The standard, blocking keyring runtime handler.
+///
+/// This handler makes use of [`keyring`] module to process
+/// [`KeyringIo`].
+pub fn handle(io: KeyringIo) -> Result<KeyringIo, Error> {
     match io {
-        Io::Error(err) => Err(Error::Other(err)),
-        Io::Read(io) => read(io),
-        Io::Write(io) => write(io),
-        Io::Delete(io) => delete(io),
+        KeyringIo::Read(io) => read(io),
+        KeyringIo::Write(io) => write(io),
+        KeyringIo::Delete(io) => delete(io),
     }
 }
 
-pub fn read(input: Result<SecretString, Entry>) -> Result<Io, Error> {
+pub fn read(input: Result<SecretString, KeyringEntry>) -> Result<KeyringIo, Error> {
     let entry = match input {
-        Ok(output) => return Ok(Io::Read(Ok(output))),
-        Err(entry) => keyring::Entry::try_from(entry)?,
+        Ok(output) => return Ok(KeyringIo::Read(Ok(output))),
+        Err(entry) => Entry::try_from(entry)?,
     };
 
     let secret = entry.get_password()?;
     let secret = SecretString::from(secret);
 
-    Ok(Io::Read(Ok(secret)))
+    Ok(KeyringIo::Read(Ok(secret)))
 }
 
-pub fn write(input: Result<(), (Entry, SecretString)>) -> Result<Io, Error> {
+pub fn write(input: Result<(), (KeyringEntry, SecretString)>) -> Result<KeyringIo, Error> {
     let (entry, secret) = match input {
-        Ok(()) => return Ok(Io::Write(Ok(()))),
-        Err((entry, secret)) => (keyring::Entry::try_from(entry)?, secret),
+        Ok(()) => return Ok(KeyringIo::Write(Ok(()))),
+        Err((entry, secret)) => (Entry::try_from(entry)?, secret),
     };
 
     let secret = secret.expose_secret();
     entry.set_password(secret)?;
 
-    Ok(Io::Write(Ok(())))
+    Ok(KeyringIo::Write(Ok(())))
 }
 
-pub fn delete(input: Result<(), Entry>) -> Result<Io, Error> {
+pub fn delete(input: Result<(), KeyringEntry>) -> Result<KeyringIo, Error> {
     let entry = match input {
-        Ok(output) => return Ok(Io::Delete(Ok(output))),
-        Err(entry) => keyring::Entry::try_from(entry)?,
+        Ok(output) => return Ok(KeyringIo::Delete(Ok(output))),
+        Err(entry) => Entry::try_from(entry)?,
     };
 
     entry.delete_credential()?;
 
-    Ok(Io::Delete(Ok(())))
+    Ok(KeyringIo::Delete(Ok(())))
 }

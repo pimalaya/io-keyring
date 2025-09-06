@@ -1,11 +1,12 @@
-//! Module gathering I/O-free, composable and iterable state machines.
+//! Collection of I/O-free, resumable and composable keyring state
+//! machines.
 //!
-//! Coroutines emit [`crate::Io`] requests that need to be processed by
-//! [`crate::handlers`] in order to continue their progression.
+//! Coroutines emit [I/O] requests that need to be processed by
+//! [runtimes] in order to continue their progression.
+//!
+//! [I/O]: crate::io::KeyringIo
+//! [runtimes]: crate::runtimes
 
-mod delete;
-mod read;
-mod write;
-
-#[doc(inline)]
-pub use self::{delete::Delete, read::Read, write::Write};
+pub mod delete;
+pub mod read;
+pub mod write;

@@ -5,7 +5,7 @@ version = "0.0.1"
 authors = ["soywod <clement.douin@posteo.net>"]
 rust-version = "1.56"
 edition = "2021"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 categories = ["api-bindings"]
 keywords = ["io-free", "coroutine", "runtime", "keyring", "keychain"]
 homepage = "https://pimalaya.org"
@@ -18,7 +18,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
-std = ["dep:thiserror"]
+std = []
 serde = ["dep:serde"]
 vendored = ["keyring/vendored"]
 
@@ -26,8 +26,8 @@ vendored = ["keyring/vendored"]
 env_logger = "0.11"
 
 [dependencies]
-keyring = "=4.0.0-rc.1"
+keyring = { version = "3.6", features = ["linux-native-sync-persistent", "crypto-rust", "apple-native", "windows-native"] }
 log = "0.4"
 secrecy = "0.10"
 serde = { version = "1", optional = true }
-thiserror = { version = "2", optional = true }
+thiserror = "2"

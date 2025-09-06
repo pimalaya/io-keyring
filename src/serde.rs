@@ -1,4 +1,4 @@
-//! Module dedicated to [`serde`] de/serialization of [`Entry`].
+//! Module dedicated to [`serde`] de/serialization of [`KeyringEntry`].
 
 use std::fmt;
 
@@ -7,16 +7,16 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 
-use crate::Entry;
+use crate::entry::KeyringEntry;
 
-impl Serialize for Entry {
+impl Serialize for KeyringEntry {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.name)
     }
 }
 
-impl<'de> Deserialize<'de> for Entry {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Entry, D::Error> {
+impl<'de> Deserialize<'de> for KeyringEntry {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<KeyringEntry, D::Error> {
         deserializer.deserialize_string(EntryVisitor)
     }
 }
@@ -24,14 +24,14 @@ impl<'de> Deserialize<'de> for Entry {
 struct EntryVisitor;
 
 impl<'de> Visitor<'de> for EntryVisitor {
-    type Value = Entry;
+    type Value = KeyringEntry;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("a keyring entry name (string)")
     }
 
     fn visit_str<E: Error>(self, v: &str) -> Result<Self::Value, E> {
-        Ok(Entry::new(v))
+        Ok(KeyringEntry::new(v))
     }
 }
 
@@ -42,7 +42,7 @@ mod tests {
         Deserialize,
     };
 
-    use crate::Entry;
+    use crate::entry::KeyringEntry;
 
     // TODO
     // #[test]
@@ -52,11 +52,11 @@ mod tests {
 
     #[test]
     fn deserialize() {
-        let expected = Entry::new("name");
+        let expected = KeyringEntry::new("name");
 
         let s = String::from("name");
         let s = StringDeserializer::<Error>::new(s);
-        let got = Entry::deserialize(s).unwrap();
+        let got = KeyringEntry::deserialize(s).unwrap();
 
         assert_eq!(expected, got);
     }
